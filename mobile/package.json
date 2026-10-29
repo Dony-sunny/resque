@@ -1,0 +1,40 @@
+{
+  "name": "resq-relay-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --lan",
+    "android": "expo run:android",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test",
+    "export:android": "expo export --platform android --output-dir dist-android"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "expo": "~55.0.0",
+    "expo-camera": "~55.0.23",
+    "expo-crypto": "~55.0.19",
+    "expo-font": "~55.0.8",
+    "expo-location": "~55.1.15",
+    "expo-secure-store": "~55.0.18",
+    "expo-sqlite": "~55.0.20",
+    "expo-system-ui": "~55.0.22",
+    "react": "19.2.0",
+    "react-native": "0.83.10",
+    "react-native-qrcode-svg": "^6.3.45",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-svg": "15.15.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "~19.2.0",
+    "typescript": "~5.9.2",
+    "vitest": "^5.0.5"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.2.15"
+  }
+}

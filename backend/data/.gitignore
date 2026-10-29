@@ -1,0 +1,3 @@
+# Runtime incident databases, demo keys and TLS private material must never ship.
+*
+!.gitignore

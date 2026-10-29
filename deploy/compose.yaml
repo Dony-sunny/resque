@@ -1,0 +1,22 @@
+# Local persistent backend. All four roles use this ONE service and data volume.
+services:
+  api:
+    build: ../backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: sqlite:////data/resq-relay.db
+      RESQ_DEMO_MODE: "true"
+      RESQ_DEMO_ACCESS_KEY: ${RESQ_DEMO_ACCESS_KEY:?Set a random demo access key in deploy/.env}
+    ports:
+      - "${RESQ_BIND_ADDRESS:-127.0.0.1}:8000:8000"
+    volumes:
+      - incident_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)"]
+      interval: 20s
+      timeout: 4s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  incident_data:

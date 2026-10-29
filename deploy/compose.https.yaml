@@ -1,0 +1,23 @@
+# Add to compose.yaml on a reachable Linux host with a DNS name pointed at it.
+# Usage: docker compose -f compose.yaml -f compose.https.yaml up -d --build
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      RESQ_API_DOMAIN: ${RESQ_API_DOMAIN:?Set the DNS name of this server}
+      RESQ_TLS_EMAIL: ${RESQ_TLS_EMAIL:?Set a certificate contact email}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  caddy_data:
+  caddy_config:
