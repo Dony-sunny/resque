@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { ApiClient, normalizeApiUrl } from './api';
 import { LocalStore, demoUser } from './store';
 import { SyncEngine } from './sync';
-import type { BackendHealth, Config, ConnectionStatus, EventKind, ReportDraft, Role, SyncSummary } from './types';
+import type { AlertInput, AuthorityAlert, BackendHealth, Config, ConnectionStatus, EventKind, LocationFix, ReportDraft, Role, SyncSummary } from './types';
 import type { SqlDatabase } from './store';
 import { connectWorkspace, emptyWorkspaceIndex, resolveWorkspace, type WorkspaceIndex } from './workspace';
 export { demoUser } from './store';
@@ -129,6 +129,10 @@ export async function runSync(role: Role, baseUrl: string) {
     const nextKey = resolveWorkspace(await index(), url);
     checking.delete(key); key = nextKey; checking.add(key);
     const result = await selected.engine.run(demoUser(role), api);
+    // Authority alerts ride along with every successful sync and stay readable offline.
+    if (result.backend_reachable) {
+      try { await selected.local.setMetadata('alerts', await api.alerts()); } catch { /* Keep the last alerts we had. */ }
+    }
     const current = await selected.local.metadata<ConnectionStatus>('connection') || old;
     await selected.local.setMetadata('connection', { state: result.backend_reachable ? 'reachable' : 'unreachable', last_attempt_at: attempted, last_success_at: result.backend_reachable ? new Date().toISOString() : current.last_success_at, error: result.backend_reachable ? null : result.message, backend_id: health.backend_id } satisfies ConnectionStatus);
     return result;
@@ -140,3 +144,46 @@ export async function runSync(role: Role, baseUrl: string) {
   } finally { checking.delete(key); }
 }
 export async function loadResponders(baseUrl: string) { return new ApiClient(baseUrl, 'coordinator', await demoKey()).responders(); }
+/** Active alerts from the last successful sync; expired ones are hidden even offline. */
+export async function loadAlerts(): Promise<AuthorityAlert[]> {
+  const alerts = await (await store()).metadata<AuthorityAlert[]>('alerts') || [];
+  return alerts.filter(alert => Date.parse(alert.expires_at) > Date.now());
+}
+export async function publishAlert(baseUrl: string, alert: AlertInput) {
+  const config = await loadConfig();
+  if (config.forceOffline) throw new Error('Turn off offline practice to publish an alert. Alerts need a server connection.');
+  const created = await new ApiClient(baseUrl, 'coordinator', await demoKey()).publishAlert(alert);
+  const local = await store();
+  await local.setMetadata('alerts', [created, ...(await local.metadata<AuthorityAlert[]>('alerts') || []).filter(row => row.id !== created.id)]);
+  return created;
+}
+/** Live operations data (teams, relief, stock, shelters, KPIs). Each successful read is cached per
+ * server workspace, so the last known picture stays visible offline, clearly marked as cached. */
+export interface Cached<T> { data: T; at: string | null; stale: boolean; error?: string }
+export async function operations<T>(role: Role, name: string, read: (api: ApiClient) => Promise<T>): Promise<Cached<T>> {
+  const config = await loadConfig(), local = await store(), key = `ops:${role}:${name}`;
+  const cached = await local.metadata<{ data: T; at: string }>(key);
+  if (config.forceOffline) return { data: cached?.data as T, at: cached?.at || null, stale: true, error: 'Offline practice is on. Showing the last saved copy.' };
+  try {
+    const data = await read(new ApiClient(config.apiUrl, role, config.demoAccessKey || ''));
+    const at = new Date().toISOString();
+    await local.setMetadata(key, { data, at });
+    return { data, at, stale: false };
+  } catch (cause) {
+    return { data: cached?.data as T, at: cached?.at || null, stale: true, error: cause instanceof Error ? cause.message : 'Server unavailable.' };
+  }
+}
+/** An operation that changes server state immediately (relief, stock, shelters, demo). Requires a connection. */
+export async function act<T>(role: Role, run: (api: ApiClient) => Promise<T>): Promise<T> {
+  const config = await loadConfig();
+  if (config.forceOffline) throw new Error('Turn off offline practice. This action needs a server connection.');
+  return run(new ApiClient(config.apiUrl, role, config.demoAccessKey || ''));
+}
+export async function saveKitChecklist(items: number[]) { await (await settings()).setMetadata('kit-checklist', items); }
+export async function loadKitChecklist(): Promise<number[]> { return await (await settings()).metadata<number[]>('kit-checklist') || []; }
+/** IDs of official alerts already read on this device, so each pops up only once. */
+export async function saveReadAlerts(ids: string[]) { await (await settings()).setMetadata('read-alerts', ids); }
+export async function loadReadAlerts(): Promise<string[]> { return await (await settings()).metadata<string[]>('read-alerts') || []; }
+/** Last good location fix, kept device-wide so a later SOS can fall back to it. */
+export async function saveLastFix(fix: LocationFix) { await (await settings()).setMetadata('last-fix', fix); }
+export async function loadLastFix(): Promise<LocationFix | null> { return (await settings()).metadata<LocationFix>('last-fix'); }

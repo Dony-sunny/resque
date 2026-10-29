@@ -1,18 +1,23 @@
 import type { Role } from '../core/types';
+import type { IconName } from '../ui/components';
 
-export type Route = 'home' | 'create' | 'relay' | 'queue' | 'settings';
+export type Route = 'home' | 'create' | 'relay' | 'map' | 'safety' | 'shelters' | 'queue' | 'settings';
 /** Register new modules here. Server permissions remain authoritative. */
-export const modules: { id: Route; roles: Role[]; label: string; ml: string; icon: 'grid-outline' | 'add-circle-outline' | 'qr-code-outline' | 'swap-vertical-outline' | 'options-outline' }[] = [
-  { id: 'home', roles: ['citizen', 'volunteer', 'coordinator', 'responder'], label: 'Workspace', ml: 'പ്രവർത്തനം', icon: 'grid-outline' },
-  { id: 'create', roles: ['citizen', 'volunteer'], label: 'New SOS', ml: 'സഹായം', icon: 'add-circle-outline' },
-  { id: 'relay', roles: ['citizen', 'volunteer'], label: 'Relay', ml: 'കൈമാറ്റം', icon: 'qr-code-outline' },
+export const modules: { id: Route; roles: Role[]; label: string; ml: string; icon: IconName }[] = [
+  { id: 'home', roles: ['citizen', 'volunteer', 'coordinator', 'responder', 'relief'], label: 'Home', ml: 'ഹോം', icon: 'grid-outline' },
+  { id: 'create', roles: ['citizen', 'volunteer'], label: 'Report', ml: 'റിപ്പോർട്ട്', icon: 'add-circle-outline' },
+  { id: 'relay', roles: ['volunteer'], label: 'Relay', ml: 'കൈമാറ്റം', icon: 'qr-code-outline' },
+  { id: 'shelters', roles: ['relief', 'coordinator'], label: 'Shelters', ml: 'ക്യാമ്പുകൾ', icon: 'home-outline' },
+  { id: 'map', roles: ['citizen', 'volunteer', 'coordinator', 'responder', 'relief'], label: 'Map', ml: 'ഭൂപടം', icon: 'map-outline' },
+  { id: 'safety', roles: ['citizen', 'volunteer'], label: 'Safety', ml: 'സുരക്ഷ', icon: 'shield-checkmark-outline' },
   { id: 'queue', roles: ['citizen', 'volunteer', 'coordinator', 'responder'], label: 'Outbox', ml: 'ഔട്ട്ബോക്സ്', icon: 'swap-vertical-outline' },
-  { id: 'settings', roles: ['citizen', 'volunteer', 'coordinator', 'responder'], label: 'Settings', ml: 'ക്രമീകരണം', icon: 'options-outline' },
+  { id: 'settings', roles: ['citizen', 'volunteer', 'coordinator', 'responder', 'relief'], label: 'Settings', ml: 'ക്രമീകരണം', icon: 'options-outline' },
 ];
 
-export const roleInfo = {
-  citizen: { title: 'Citizen', ml: 'പൗരൻ', description: 'Request help. Keep a clear record.', descriptionMl: 'സഹായം അഭ്യർത്ഥിക്കുക. വിവരങ്ങൾ വ്യക്തമായി രേഖപ്പെടുത്തുക.', workspace: 'Your safety, connected.', workspaceMl: 'നിങ്ങളുടെ സുരക്ഷയ്ക്ക് ഒരു ബന്ധം.', icon: 'person-outline' },
-  volunteer: { title: 'Community volunteer', ml: 'സന്നദ്ധ പ്രവർത്തകൻ', description: 'Collect reports. Carry them forward.', descriptionMl: 'റിപ്പോർട്ടുകൾ ശേഖരിച്ച് കണക്ഷൻ ലഭിക്കുമ്പോൾ അയയ്ക്കുക.', workspace: 'Be the missing connection.', workspaceMl: 'സഹായത്തിലേക്കുള്ള ബന്ധമാകുക.', icon: 'people-outline' },
-  coordinator: { title: 'Rescue coordinator', ml: 'രക്ഷാപ്രവർത്തന ഏകോപകൻ', description: 'Verify reports. Coordinate the response.', descriptionMl: 'റിപ്പോർട്ടുകൾ പരിശോധിച്ച് രക്ഷാപ്രവർത്തനം ഏകോപിപ്പിക്കുക.', workspace: 'Turn reports into response.', workspaceMl: 'വിവരങ്ങളിൽ നിന്ന് രക്ഷാപ്രവർത്തനത്തിലേക്ക്.', icon: 'compass-outline' },
-  responder: { title: 'Field responder', ml: 'രക്ഷാപ്രവർത്തകൻ', description: 'Know your mission. Record your progress.', descriptionMl: 'നിയോഗിച്ച ദൗത്യം കാണുക. പുരോഗതി രേഖപ്പെടുത്തുക.', workspace: 'A clear mission. Every step.', workspaceMl: 'ഓരോ ഘട്ടത്തിലും വ്യക്തമായ ദൗത്യം.', icon: 'shield-checkmark-outline' },
-} as const;
+export const roleInfo: Record<Role, { title: string; ml: string; description: string; descriptionMl: string; workspace: string; workspaceMl: string; icon: IconName }> = {
+  citizen: { title: 'Victim / Citizen', ml: 'ദുരിതബാധിതർ / പൗരൻ', description: 'Send an SOS fast. Track help.', descriptionMl: 'വേഗത്തിൽ SOS അയയ്ക്കുക. സഹായം ട്രാക്ക് ചെയ്യുക.', workspace: 'Your safety, connected.', workspaceMl: 'നിങ്ങളുടെ സുരക്ഷയ്ക്ക് ഒരു ബന്ധം.', icon: 'person-outline' },
+  coordinator: { title: 'Government Official', ml: 'സർക്കാർ ഉദ്യോഗസ്ഥൻ', description: 'Prioritise incidents. Assign teams. Publish alerts.', descriptionMl: 'സംഭവങ്ങൾ മുൻഗണനയിലാക്കുക. സംഘങ്ങളെ നിയോഗിക്കുക.', workspace: 'Command centre', workspaceMl: 'കമാൻഡ് സെന്റർ', icon: 'business-outline' },
+  responder: { title: 'Rescue Team', ml: 'രക്ഷാസംഘം', description: 'Receive missions. Update progress. Request support.', descriptionMl: 'ദൗത്യങ്ങൾ സ്വീകരിക്കുക. പുരോഗതി രേഖപ്പെടുത്തുക.', workspace: 'Team Alpha missions', workspaceMl: 'ടീം ആൽഫ ദൗത്യങ്ങൾ', icon: 'shield-checkmark-outline' },
+  relief: { title: 'Food & Relief', ml: 'ഭക്ഷണം & ദുരിതാശ്വാസം', description: 'Allocate stock. Dispatch supplies. Manage shelters.', descriptionMl: 'സാധനങ്ങൾ വിതരണം ചെയ്യുക. ക്യാമ്പുകൾ നിയന്ത്രിക്കുക.', workspace: 'Relief operations', workspaceMl: 'ദുരിതാശ്വാസ പ്രവർത്തനം', icon: 'cube-outline' },
+  volunteer: { title: 'Community volunteer (QR relay)', ml: 'സന്നദ്ധപ്രവർത്തകൻ (QR കൈമാറ്റം)', description: 'Collect reports offline. Carry them to the network.', descriptionMl: 'റിപ്പോർട്ടുകൾ ശേഖരിച്ച് കണക്ഷൻ ലഭിക്കുമ്പോൾ അയയ്ക്കുക.', workspace: 'Be the missing connection.', workspaceMl: 'സഹായത്തിലേക്കുള്ള ബന്ധമാകുക.', icon: 'people-outline' },
+};

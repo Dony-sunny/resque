@@ -283,9 +283,9 @@ def test_seed_is_repeatable_and_contains_only_synthetic_reports(client):
     seed_database(client.app.state.engine)
     seed_database(client.app.state.engine)
     reports = client.get("/v1/reports", headers=auth(client, "coordinator")).json()
-    assert len(reports) == 3
-    assert all("[SYNTHETIC]" in row["description"] for row in reports)
-    assert sum(row["assigned_to"] == "demo-responder" for row in reports) == 1
+    assert len(reports) == 20
+    assert all(row["description"].startswith("[SIMULATED]") for row in reports)
+    assert all(row["location"]["label"].startswith("Simulated") for row in reports)
 
 
 def test_rejected_event_id_cannot_be_corrected_in_place(client):
@@ -384,3 +384,71 @@ def test_online_sqlite_backup_restores_reports_identity_and_receipts(tmp_path):
         reports = restored.get("/v1/reports", headers=headers).json()
         assert reports[0]["id"] == payload["id"]
         assert len(reports[0]["audit"]) == 1
+
+
+def sms_text(payload):
+    created_ms = int(datetime.fromisoformat(payload["created_at"].replace("Z", "+00:00")).timestamp() * 1000)
+    loc = payload["location"]
+    lat = "-" if loc["latitude"] is None else repr(loc["latitude"])
+    lon = "-" if loc["longitude"] is None else repr(loc["longitude"])
+    return "|".join(["RQ1", payload["id"], payload["incident_type"], str(payload["affected_count"]), lat, lon,
+                     str(created_ms), payload["origin_id"], payload["receipt_hash"], loc["label"], payload["description"]])
+
+
+def test_alerts_published_by_coordinator_reach_every_role(client):
+    alert = {"title": "Evacuate Ward 5", "body": "Move to GHSS relief camp", "severity": "danger", "area": "Aluva Ward 5", "hours": 6}
+    assert client.post("/v1/alerts", json=alert, headers=auth(client, "citizen")).status_code == 403
+    created = client.post("/v1/alerts", json=alert, headers=auth(client, "coordinator"))
+    assert created.status_code == 200, created.text
+    for role in ("citizen", "volunteer", "responder", "coordinator"):
+        rows = client.get("/v1/alerts", headers=auth(client, role)).json()
+        assert [row["title"] for row in rows] == ["Evacuate Ward 5"]
+    assert client.get("/v1/alerts").status_code == 401
+    assert client.post("/v1/alerts", json={**alert, "severity": "panic"}, headers=auth(client, "coordinator")).status_code == 422
+
+
+def test_sms_sos_creates_report_replies_and_app_sync_is_duplicate(client):
+    payload = create_payload()
+    payload["description"] = "Water rising | two elderly people upstairs"
+    form = client.post("/v1/sms/inbound", data={"From": "+919876543210", "Body": sms_text(payload)})
+    assert form.status_code == 200 and "<Message>ResQ: SOS" in form.text
+    again = client.post("/v1/sms/inbound", json={"from": "+919876543210", "body": sms_text(payload)}).json()
+    assert again["status"] == "duplicate"
+    report = client.get(f"/v1/reports/{payload['id']}", headers=auth(client, "coordinator")).json()
+    assert report["description"] == payload["description"]
+    assert any(row["action"] == "sms.received" and "+91****210" in row["detail"] for row in report["audit"])
+    # The citizen's own app later syncs the identical report: no new incident, ownership claimed.
+    citizen = auth(client, "citizen")
+    row = sync(client, citizen, event("report.create", payload["id"], payload))[0]
+    assert row["status"] == "duplicate"
+    assert [r["id"] for r in client.get("/v1/reports", headers=citizen).json()] == [payload["id"]]
+    status = client.post("/v1/sms/inbound", json={"from": "x", "body": "STATUS " + payload["id"][:8]}).json()
+    assert payload["id"][:8] in status["reply"] and "delivered" in status["reply"]
+
+
+def test_sms_rejects_garbage_and_requires_secret_outside_demo(tmp_path):
+    api = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'sms.db'}", demo_mode=False))
+    with TestClient(api) as plain:
+        assert plain.post("/v1/sms/inbound", json={"body": "hello"}).status_code == 403
+    api = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'sms2.db'}", sms_secret="s3cret"))
+    with TestClient(api) as keyed:
+        assert keyed.post("/v1/sms/inbound", json={"body": "hello"}).status_code == 401
+        result = keyed.post("/v1/sms/inbound?key=s3cret", json={"body": "help me"}).json()
+        assert result["status"] == "rejected" and "112" in result["reply"]
+
+
+def test_dashboard_page_is_served(client):
+    page = client.get("/dashboard")
+    assert page.status_code == 200 and "ResQ Control Room" in page.text
+
+
+def test_sms_shared_vector_matches_mobile_encoder():
+    # Exact string produced by mobile/tests/sms-geo.test.ts (encodeSmsReport).
+    from app.sms import decode
+    text = ("RQ1|30000000-0000-4000-8000-000000000001|trapped|2|10.107612|76.351634|1793261730123|demo-citizen|"
+            + "b" * 64 + "|Near St. Mary's Church, Aluva|Water at first floor | two elderly people")
+    payload = decode(text)
+    assert payload["location"] == {"label": "Near St. Mary's Church, Aluva", "latitude": 10.107612, "longitude": 76.351634}
+    assert payload["description"] == "Water at first floor | two elderly people"
+    from app.schemas import ReportInput
+    assert ReportInput.model_validate(payload).created_at == datetime(2026, 10, 29, 8, 15, 30, 123000, tzinfo=timezone.utc)

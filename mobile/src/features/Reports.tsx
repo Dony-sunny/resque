@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import type { Report, Role, QueueItem } from '../core/types';
+import type { Config, Report, Role, QueueItem } from '../core/types';
+import { AlertComposer } from './Alerts';
+import { QuickSos } from './QuickSos';
+import { progressLabel } from './Tracker';
+import type { Route } from './registry';
 import { Badge, Button, Chip, Empty, Icon, Notice, SectionHeading, type IconName } from '../ui/components';
 import { colors, ui } from '../ui/theme';
 import { dateLabel, friendly, incidentName, isSyntheticDescription, localizeMessage, word, type Language } from '../ui/words';
@@ -24,12 +28,14 @@ export function ReportCard({ report, role, language, pending, onPress }: { repor
       {report.urgency ? <Badge label={`${friendly(report.urgency, language)} ${word(language, 'urgency', 'അടിയന്തരം')}`} tone={report.urgency === 'critical' || report.urgency === 'high' ? 'danger' : 'neutral'} /> : null}
       {role === 'responder' ? <Badge label={friendly(report.mission_status, language)} tone="success" /> : null}
       {pending > 0 ? <Badge label={`${pending} ${word(language, 'local changes queued', 'മാറ്റങ്ങൾ ക്യൂവിൽ')}`} tone="warning" /> : null}
+      {(role === 'citizen' || role === 'volunteer') && report.source !== 'seed' && report.delivery_state !== 'pending' ? <Badge label={progressLabel(report, language).toUpperCase()} tone="success" /> : null}
     </View>
   </Pressable>;
 }
 
-export function ReportsScreen({ role, language, reports, queue, onOpen, onCreate, onRelay, onSeed }: {
-  role: Role; language: Language; reports: Report[]; queue: QueueItem[]; onOpen: (id: string) => void; onCreate: () => void; onRelay: () => void; onSeed: () => void;
+export function ReportsScreen({ role, language, reports, queue, config, onOpen, onCreate, onRelay, onSeed, onQuickCreated, onAlertPublished, onNavigate, onSync, syncing, lastSync }: {
+  role: Role; language: Language; reports: Report[]; queue: QueueItem[]; config: Config; onOpen: (id: string) => void; onCreate: () => void; onRelay: () => void; onSeed: () => void;
+  onQuickCreated: (report: Report) => Promise<void>; onAlertPublished: () => Promise<void>; onNavigate: (route: Route) => void; onSync: () => void; syncing: boolean; lastSync: string | null;
 }) {
   const [filter, setFilter] = useState('all');
   const local = reports.filter(r => r.source !== 'seed');
@@ -38,7 +44,26 @@ export function ReportsScreen({ role, language, reports, queue, onOpen, onCreate
   const shown = reports.filter(r => filter === 'all' || (filter === 'pending' ? r.delivery_state === 'pending' && r.source !== 'seed' : filter === 'unverified' ? r.verification === 'unverified' : r.delivery_state !== 'pending' && r.source !== 'seed'));
   const copy = roleInfo[role];
   return <View style={{ gap: 19 }}>
-    <View style={{ gap: 7 }}><Text style={ui.eyebrow}>{word(language, 'PROJECT NEVERMORE · RESQ RELAY', 'പ്രോജക്റ്റ് നെവർമോർ · റെസ്ക്യൂ റിലേ')}</Text><Text style={ui.title}>{word(language, copy.workspace, copy.workspaceMl)}</Text><Text style={ui.subtitle}>{word(language, copy.description, copy.descriptionMl)}</Text></View>
+    {role === 'citizen' ? <View style={{ padding: 16, borderRadius: 22, backgroundColor: colors.navy, gap: 10 }}>
+      <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '800' }}>{word(language, 'In danger right now?', 'ഇപ്പോൾ അപകടത്തിലാണോ?')}</Text>
+      <QuickSos role={role} language={language} onCreated={onQuickCreated} />
+    </View> : null}
+    {role === 'citizen' ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>{([
+      ['add-circle-outline', 'Report emergency', 'അടിയന്തരാവസ്ഥ അറിയിക്കുക', onCreate],
+      ['home-outline', 'Nearby shelters', 'അടുത്ത ക്യാമ്പുകൾ', () => onNavigate('map')],
+      ['megaphone-outline', 'Disaster alerts', 'മുന്നറിയിപ്പുകൾ', () => onNavigate('safety')],
+      ['call-outline', 'Emergency contacts', 'അടിയന്തര നമ്പറുകൾ', () => onNavigate('safety')],
+      ['book-outline', 'Safety instructions', 'സുരക്ഷാ നിർദേശങ്ങൾ', () => onNavigate('safety')],
+      ['qr-code-outline', 'Show QR to a volunteer', 'QR കാണിക്കുക', onRelay],
+    ] as [IconName, string, string, () => void][]).map(([icon, en, ml, go]) => <Pressable key={en} accessibilityRole="button" accessibilityLabel={word(language, en, ml)} onPress={go} style={({ pressed }) => [ui.card, { flexBasis: '30%', flexGrow: 1, padding: 12, alignItems: 'center', gap: 6, opacity: pressed ? 0.7 : 1 }]}>
+      <Icon name={icon} size={26} /><Text style={[ui.small, { textAlign: 'center', color: colors.navy, fontWeight: '700' }]}>{word(language, en, ml)}</Text>
+    </Pressable>)}</View> : null}
+    {role === 'citizen' || role === 'volunteer' ? <View style={[ui.card, { backgroundColor: queue.length ? colors.amberLight : colors.tealLight, borderColor: 'transparent' }]}>
+      <View style={ui.between}><View style={{ flex: 1 }}><Text style={ui.h3}>{queue.length ? word(language, `${queue.length} change(s) pending sync`, `${queue.length} മാറ്റങ്ങൾ സിങ്ക് കാത്തിരിക്കുന്നു`) : word(language, 'Everything is synced', 'എല്ലാം സിങ്ക് ചെയ്തു')}</Text>
+        <Text style={ui.small}>{config.forceOffline ? word(language, 'Offline mode: saved on this phone, not yet sent.', 'ഓഫ്‌ലൈൻ: ഫോണിൽ സേവ് ചെയ്തു, അയച്ചിട്ടില്ല.') : lastSync ? `${word(language, 'Last server contact', 'അവസാന സെർവർ ബന്ധം')}: ${dateLabel(lastSync, language)}` : word(language, 'Not yet connected to the server.', 'സെർവറുമായി ബന്ധിപ്പിച്ചിട്ടില്ല.')}</Text></View>
+        <Button title={word(language, 'Sync', 'സിങ്ക്')} icon="sync-outline" tone="secondary" loading={syncing} disabled={config.forceOffline} onPress={onSync} /></View>
+    </View> : null}
+    <View style={{ gap: 7 }}><Text style={ui.eyebrow}>{word(language, 'RESQ · INTELLIGENT DISASTER RESPONSE', 'പ്രോജക്റ്റ് നെവർമോർ · റെസ്ക്യൂ റിലേ')}</Text><Text style={ui.title}>{word(language, copy.workspace, copy.workspaceMl)}</Text><Text style={ui.subtitle}>{word(language, copy.description, copy.descriptionMl)}</Text></View>
     <View style={{ flexDirection: 'row', gap: 10 }}>{[
       { value: local.length, label: word(language, 'Reports', 'റിപ്പോർട്ടുകൾ'), color: colors.navy },
       { value: pending, label: word(language, 'Pending', 'കാത്തിരിപ്പ്'), color: colors.amber },
@@ -50,6 +75,7 @@ export function ReportsScreen({ role, language, reports, queue, onOpen, onCreate
       <Button title={word(language, role === 'citizen' ? 'Create an SOS' : 'Collect a report', 'SOS സൃഷ്ടിക്കുക')} tone="danger" icon="add-outline" onPress={onCreate} />
       {role === 'volunteer' ? <Button title={word(language, 'Scan a relay QR', 'റിലേ QR സ്കാൻ ചെയ്യുക')} tone="secondary" icon="qr-code-outline" onPress={onRelay} /> : null}
     </View> : <Notice title={word(language, 'People remain in control', 'തീരുമാനം മനുഷ്യരുടേത്')} text={word(language, role === 'coordinator' ? 'Urgency is selected by a coordinator with written reasons. Reports arrive unverified.' : 'Mission changes and notes are saved locally first. The last server-confirmed status stays visible until sync.', 'സ്ഥിരീകരിക്കാത്ത വിവരങ്ങൾ പരിശോധിച്ച ശേഷം പ്രവർത്തിക്കുക. ഓഫ്‌ലൈൻ മാറ്റങ്ങൾ സിങ്ക് വരെയുണ്ടാകും.')} />}
+    {role === 'coordinator' ? <AlertComposer language={language} config={config} onPublished={onAlertPublished} /> : null}
     <SectionHeading title={word(language, role === 'coordinator' ? 'Incident desk' : role === 'responder' ? 'Your assigned missions' : role === 'volunteer' ? 'Collected & relayed' : 'Your reports', 'റിപ്പോർട്ടുകൾ')} />
     <View style={ui.row}><Chip label={word(language, 'All', 'എല്ലാം')} active={filter === 'all'} onPress={() => setFilter('all')} /><Chip label={word(language, 'Pending', 'കാത്തിരിപ്പ്')} active={filter === 'pending'} onPress={() => setFilter('pending')} />{role === 'coordinator' ? <Chip label={word(language, 'Unverified', 'പരിശോധിക്കാത്തത്')} active={filter === 'unverified'} onPress={() => setFilter('unverified')} /> : <Chip label={word(language, 'Received', 'ലഭിച്ചു')} active={filter === 'received'} onPress={() => setFilter('received')} />}</View>
     {shown.length ? shown.map(r => <ReportCard key={r.id} report={r} role={role} language={language} pending={queue.filter(q => q.report_id === r.id).length} onPress={() => onOpen(r.id)} />) : <Empty title={word(language, 'No reports here yet', 'റിപ്പോർട്ടുകൾ ഇല്ല')} text={word(language, role === 'responder' ? 'Sync to receive missions assigned to this responder.' : 'Create a report or sync with your local demo backend.', 'പുതിയ റിപ്പോർട്ട് സൃഷ്ടിക്കുകയോ സെർവറുമായി സിങ്ക് ചെയ്യുകയോ ചെയ്യുക.')} />}

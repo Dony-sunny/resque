@@ -12,6 +12,8 @@ export function SettingsScreen({ role, config, language, onRole, onConfig, synci
 }) {
   const [url, setUrl] = useState(config.apiUrl);
   const [accessKey, setAccessKey] = useState(config.demoAccessKey || '');
+  const [smsNumber, setSmsNumber] = useState(config.smsNumber || '');
+  const [smsSaved, setSmsSaved] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -56,6 +58,12 @@ export function SettingsScreen({ role, config, language, onRole, onConfig, synci
       <Text style={ui.small}>{word(language, syncing ? 'A sync request is in progress. This control is available when it finishes.' : 'Local reports, QR handoff, and notes continue to work. New sync attempts pause while this is on.', syncing ? 'സിങ്ക് നടക്കുന്നു. പൂർത്തിയായ ശേഷം ഈ ക്രമീകരണം മാറ്റാം.' : 'ലോക്കൽ റിപ്പോർട്ടുകളും QR കൈമാറ്റവും നോട്ടുകളും പ്രവർത്തിക്കും. പുതിയ സിങ്ക് ശ്രമങ്ങൾ നിൽക്കും.')}</Text>
     </View>
     <View style={ui.card}>
+      <View style={ui.row}><Icon name="chatbox-ellipses-outline" /><Text style={ui.h3}>{word(language, 'SMS fallback number', 'SMS ഫാൾബാക്ക് നമ്പർ')}</Text></View>
+      <Field label={word(language, 'Control room SMS gateway number', 'കൺട്രോൾ റൂം SMS നമ്പർ')} value={smsNumber} onChangeText={value => { setSmsNumber(value); setSmsSaved(''); }} keyboardType="phone-pad" maxLength={20} placeholder="+91 98XXXXXXXX" hint={word(language, 'Pending SOS reports can be sent to this number as one coded SMS when there is signal but no internet. The gateway replies with a confirmation SMS.', 'ഇന്റർനെറ്റ് ഇല്ലാത്തപ്പോൾ SOS ഈ നമ്പറിലേക്ക് SMS ആയി അയയ്ക്കാം.')} />
+      <Button title={word(language, 'Save SMS number', 'SMS നമ്പർ സേവ് ചെയ്യുക')} icon="save-outline" tone="secondary" disabled={busy || smsNumber.trim() === (config.smsNumber || '')} onPress={() => { void change({ smsNumber: smsNumber.trim() }).then(() => setSmsSaved(word(language, 'SMS number saved.', 'SMS നമ്പർ സേവ് ചെയ്തു.'))); }} />
+      {smsSaved ? <Text style={ui.small}>{smsSaved}</Text> : null}
+    </View>
+    <View style={ui.card}>
       <View style={ui.row}><Icon name="server-outline" /><Text style={ui.h3}>{word(language, 'Connect to your backend', 'സെർവറുമായി ബന്ധിപ്പിക്കുക')}</Text></View>
       <Field label={word(language, 'Backend address', 'സെർവർ വിലാസം')} value={url} onChangeText={setUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" editable={!syncing && !busy} placeholder="https://your-demo-server.example" hint={word(language, 'Use the same reachable address on every phone. localhost refers to the phone itself. Installed APKs use HTTPS unless a specific local demo host was configured at build time.', 'എല്ലാ ഫോണിലും ലഭ്യമായ ഒരേ വിലാസം നൽകുക. localhost എന്നത് ഫോൺ തന്നെയാണ്. ഇൻസ്റ്റാൾ ചെയ്ത APK-യിൽ HTTPS വിലാസം ഉപയോഗിക്കുക.')} />
       <Field label={word(language, 'Demo access key', 'ഡെമോ ആക്സസ് കീ')} value={accessKey} onChangeText={setAccessKey} autoCapitalize="none" autoCorrect={false} secureTextEntry editable={!syncing && !busy} placeholder={word(language, 'Required only if enabled on the server', 'സെർവറിൽ സജ്ജമാക്കിയിട്ടുണ്ടെങ്കിൽ മാത്രം')} hint={word(language, 'Stored in Android secure storage. Ask your demo operator for the shared key; it is never included in report QR codes.', 'Android സുരക്ഷിത സംഭരണത്തിലാണ് സൂക്ഷിക്കുന്നത്. ഡെമോ നടത്തുന്ന വ്യക്തിയിൽ നിന്ന് കീ നേടുക. റിപ്പോർട്ട് QR-യിൽ കീ ഉൾപ്പെടില്ല.')} />
@@ -72,6 +80,7 @@ export function SettingsScreen({ role, config, language, onRole, onConfig, synci
     <View style={ui.card}>
       <Text style={ui.eyebrow}>RESQ RELAY · HACKATHON</Text><Text style={ui.h3}>{word(language, 'Designed to grow', 'വളരാൻ രൂപകൽപ്പന ചെയ്തത്')}</Text>
       <Text style={ui.small}>{word(language, 'Offline reports, physical QR relay, durable sync, review, assignments, field notes, and audit history are implemented. Production enrollment and real rescue dispatch integration remain future work.', 'ഓഫ്‌ലൈൻ റിപ്പോർട്ടുകൾ, QR കൈമാറ്റം, സിങ്ക്, പരിശോധന, നിയോഗം, ഫീൽഡ് നോട്ടുകൾ, ഓഡിറ്റ് എന്നിവ നടപ്പാക്കിയിട്ടുണ്ട്. യഥാർത്ഥ അക്കൗണ്ട് രജിസ്ട്രേഷനും രക്ഷാസേനയുമായുള്ള ബന്ധവും ഭാവിയിൽ ചേർക്കേണ്ടതാണ്.')}</Text>
+      <Text style={ui.small}>{word(language, 'Also built: one-tap SOS with Call 112, SMS fallback with reply confirmation, SOS progress tracking, GPS → network → last-known location fallback, an offline map with help points, official alerts, and a live web dashboard at /dashboard.', 'ഒറ്റ ടാപ്പ് SOS, 112, SMS ഫാൾബാക്ക്, SOS പുരോഗതി, ലൊക്കേഷൻ ഫാൾബാക്ക്, ഓഫ്‌ലൈൻ ഭൂപടം, ഔദ്യോഗിക മുന്നറിയിപ്പുകൾ, വെബ് ഡാഷ്ബോർഡ് എന്നിവയും ഉണ്ട്.')}</Text>
       <Text style={ui.small}>{word(language, 'No Bluetooth mesh or unsupported offline transport is simulated.', 'Bluetooth mesh അല്ലെങ്കിൽ പിന്തുണയില്ലാത്ത ഓഫ്‌ലൈൻ കൈമാറ്റം നടിക്കുന്നില്ല.')}</Text>
     </View>
   </View>;

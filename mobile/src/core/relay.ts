@@ -2,7 +2,7 @@ import type { Report, ReportDraft, ReportInput } from './types';
 
 export const MAX_RELAY_BYTES = 1900;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const kinds = new Set(['flood', 'medical', 'fire', 'trapped', 'supplies', 'other']);
+const kinds = new Set(['flood', 'landslide', 'fire', 'earthquake', 'cyclone', 'medical', 'trapped', 'supplies', 'other']);
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Expected an object.');
   return value as Record<string, unknown>;

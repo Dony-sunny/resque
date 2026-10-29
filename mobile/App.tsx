@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StatusBar, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StatusBar, Text, Vibration, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import type { Config, ConnectionStatus, QueueItem, Report, Role } from './src/core/types';
+import type { AuthorityAlert, Config, ConnectionStatus, QueueItem, Report, Role } from './src/core/types';
 import * as service from './src/core/services';
 import { modules, roleInfo, type Route } from './src/features/registry';
 import { ReportsScreen } from './src/features/Reports';
@@ -10,6 +10,11 @@ import { RelayScreen } from './src/features/Relay';
 import { OutboxScreen } from './src/features/Outbox';
 import { SettingsScreen } from './src/features/Settings';
 import { ReportDetail } from './src/features/ReportDetail';
+import { MapScreen } from './src/features/MapScreen';
+import { AlertPopup } from './src/features/Alerts';
+import { GovernmentHome, ReliefHome, RescueHome, SheltersScreen } from './src/features/Ops';
+import { SafetyScreen } from './src/features/Safety';
+import { progressIndex, progressLabel } from './src/features/Tracker';
 import { Button, Icon, Notice } from './src/ui/components';
 import { colors, ui } from './src/ui/theme';
 import { dateLabel, localizeMessage, word } from './src/ui/words';
@@ -22,6 +27,20 @@ function RelayApp() {
   const [config, setConfig] = useState<Config>(defaultConfig);
   const [reports, setReports] = useState<Report[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [alerts, setAlerts] = useState<AuthorityAlert[]>([]);
+  // Last seen progress per report, so SOS updates are announced once.
+  const seenProgress = useRef<{ role: Role; steps: Map<string, number> } | null>(null);
+  // Official alerts the person has already read; null until loaded so nothing pops early.
+  const [dismissed, setDismissed] = useState<Set<string> | null>(null);
+  const dismissedRef = useRef<Set<string> | null>(null);
+  dismissedRef.current = dismissed;
+  const popup = dismissed ? alerts.find(alert => !dismissed.has(alert.id)) : undefined;
+  useEffect(() => { void service.loadReadAlerts().then(ids => setDismissed(new Set(ids))).catch(() => setDismissed(new Set())); }, []);
+  useEffect(() => { if (popup) Vibration.vibrate(popup.severity === 'danger' ? [0, 600, 200, 600, 200, 600] : [0, 300, 150, 300]); }, [popup?.id]);
+  function readAlert(id: string) {
+    const next = new Set(dismissedRef.current || []); next.add(id); setDismissed(next);
+    void service.saveReadAlerts([...next].slice(-200)).catch(() => undefined);
+  }
   const [ready, setReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
@@ -43,9 +62,27 @@ function RelayApp() {
   const refresh = useCallback(async () => {
     const current = roleRef.current;
     const address = configRef.current.apiUrl;
-    const [nextReports, nextQueue, nextConnection] = await Promise.all([service.loadReports(current), service.loadQueue(current), service.loadConnectionStatus()]);
-    if (roleRef.current === current && configRef.current.apiUrl === address) { setReports(nextReports); setQueue(nextQueue); setConnection(nextConnection); }
+    const [nextReports, nextQueue, nextConnection, nextAlerts] = await Promise.all([service.loadReports(current), service.loadQueue(current), service.loadConnectionStatus(), service.loadAlerts()]);
+    if (roleRef.current === current && configRef.current.apiUrl === address) { setReports(nextReports); setQueue(nextQueue); setConnection(nextConnection); setAlerts(nextAlerts); announce(current, nextReports, nextAlerts); }
   }, []);
+  /** Delivery acknowledgement for the person who asked for help, plus new official alerts. */
+  function announce(current: Role, nextReports: Report[], nextAlerts: AuthorityAlert[]) {
+    const lang = configRef.current.language;
+    // An unread official alert pops up on its own; don't stack an SOS update dialog over it.
+    const alertPending = nextAlerts.some(alert => !dismissedRef.current?.has(alert.id));
+    const steps = new Map(nextReports.filter(r => r.source !== 'seed').map(r => [r.id, progressIndex(r)]));
+    const previous = seenProgress.current?.role === current ? seenProgress.current.steps : null;
+    seenProgress.current = { role: current, steps };
+    if (!previous || (current !== 'citizen' && current !== 'volunteer')) return;
+    const advanced = nextReports.filter(r => previous.has(r.id) && (steps.get(r.id) ?? 0) > (previous.get(r.id) ?? 0));
+    if (!advanced.length || alertPending) return;
+    const r = advanced[0];
+    Vibration.vibrate([0, 250, 120, 250]);
+    setMessage(`Update: ${progressLabel(r, 'en')} — ${r.location.label}`);
+    Alert.alert(word(lang, 'Your SOS was updated', 'നിങ്ങളുടെ SOS പുതുക്കി'), `${progressLabel(r, lang)}
+
+📍 ${r.location.label}`);
+  }
   const sync = useCallback(async () => {
     if (syncLock.current || settingsLock.current) return;
     const current = roleRef.current;
@@ -72,7 +109,7 @@ function RelayApp() {
     void refresh().catch(e => { if (active) setError(e instanceof Error ? e.message : 'Could not load workspace'); }).finally(() => { if (active) setWorkspaceLoading(false); });
     void sync(); return () => { active = false; };
   }, [role, ready, refresh, sync]);
-  useEffect(() => { if (!ready) return; const timer = setInterval(() => void sync(), 20000); const listener = AppState.addEventListener('change', state => { if (state === 'active') void sync(); }); return () => { clearInterval(timer); listener.remove(); }; }, [ready, sync]);
+  useEffect(() => { if (!ready) return; const timer = setInterval(() => void sync(), 10000); const listener = AppState.addEventListener('change', state => { if (state === 'active') void sync(); }); return () => { clearInterval(timer); listener.remove(); }; }, [ready, sync]);
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [route, role]);
 
   function navigate(next: Route) { if (settingsLock.current) return; setRoute(next); setError(''); }
@@ -88,7 +125,7 @@ function RelayApp() {
     if (partial.forceOffline === false || partial.apiUrl !== undefined) void sync();
   }
   function switchRole(next: Role) { if (settingsLock.current || roleRef.current === next) return; roleRef.current = next; setRole(next); setReports([]); setQueue([]); setSelectedId(undefined); setRelayId(undefined); navigate('home'); setMessage('Loading this demo workspace...'); }
-  async function created(report: Report) { if (report.origin_id !== service.demoUser(roleRef.current).id) return; await refresh(); navigate('home'); setSelectedId(report.id); setMessage('SOS saved on this device. It has not been delivered to the server.'); }
+  async function created(report: Report) { if (report.origin_id !== service.demoUser(roleRef.current).id) return; await refresh(); navigate('home'); setSelectedId(report.id); setMessage('SOS saved on this device. It has not been delivered to the server.'); void sync(); }
   function showRelay(id: string) { setSelectedId(undefined); setRelayId(id); navigate('relay'); }
   async function seed() { try { await service.seedDemo(roleRef.current); await refresh(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not load samples.'); } }
   const selected = reports.find(r => r.id === selectedId);
@@ -99,7 +136,7 @@ function RelayApp() {
     <StatusBar barStyle="dark-content" backgroundColor={colors.canvas} />
     <View style={{ backgroundColor: colors.paper, borderBottomWidth: 1, borderBottomColor: colors.line }}>
       <View style={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12, maxWidth: 800, width: '100%', alignSelf: 'center', gap: 12 }}>
-        <View style={ui.between}><View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flex: 1 }}><View style={{ width: 43, height: 43, borderRadius: 14, backgroundColor: colors.teal, justifyContent: 'center', alignItems: 'center' }}><Icon name="radio-outline" color="#FFFFFF" size={28} /></View><View style={{ flex: 1 }}><Text style={{ color: colors.navy, fontSize: 22, fontWeight: '800', letterSpacing: -0.6 }}>ResQ Relay</Text><Text style={{ color: colors.muted, fontSize: language === 'ml' ? 9 : 10, fontWeight: '700', letterSpacing: language === 'ml' ? 0.1 : 1.8 }}>{word(language, 'HELP MOVES WITH PEOPLE', 'മനുഷ്യരിലൂടെ സഹായം എത്തുന്നു')}</Text></View></View><Pressable accessibilityRole="button" accessibilityLabel={word(language, 'Sync with backend now', 'സെർവറുമായി സിങ്ക് ചെയ്യുക')} disabled={!ready || syncing || configSaving || config.forceOffline} onPress={() => void sync()} style={({ pressed }) => ({ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: colors.tealLight, opacity: pressed || config.forceOffline ? 0.5 : 1 })}>{syncing ? <ActivityIndicator color={colors.teal} /> : <Icon name="sync-outline" size={23} />}</Pressable></View>
+        <View style={ui.between}><View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flex: 1 }}><View style={{ width: 43, height: 43, borderRadius: 14, backgroundColor: colors.teal, justifyContent: 'center', alignItems: 'center' }}><Icon name="radio-outline" color="#FFFFFF" size={28} /></View><View style={{ flex: 1 }}><Text style={{ color: colors.navy, fontSize: 22, fontWeight: '800', letterSpacing: -0.6 }}>RESQ</Text><Text style={{ color: colors.muted, fontSize: language === 'ml' ? 9 : 10, fontWeight: '700', letterSpacing: language === 'ml' ? 0.1 : 1.8 }}>{word(language, 'COLLECT FASTER. RESPOND SMARTER.', 'വേഗം ശേഖരിക്കുക. മികച്ച പ്രതികരണം.')}</Text></View></View><Pressable accessibilityRole="button" accessibilityLabel={word(language, 'Sync with backend now', 'സെർവറുമായി സിങ്ക് ചെയ്യുക')} disabled={!ready || syncing || configSaving || config.forceOffline} onPress={() => void sync()} style={({ pressed }) => ({ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: colors.tealLight, opacity: pressed || config.forceOffline ? 0.5 : 1 })}>{syncing ? <ActivityIndicator color={colors.teal} /> : <Icon name="sync-outline" size={23} />}</Pressable></View>
         <View style={[ui.between, { flexWrap: 'wrap' }]}><Pressable accessibilityRole="button" accessibilityLabel={word(language, 'Change demo role', 'ഡെമോ ഉപയോക്തൃവിഭാഗം മാറ്റുക')} onPress={() => navigate('settings')} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', minHeight: 44, flexShrink: 1 }}><Icon name={roleInfo[role].icon} size={16} color={colors.muted} /><Text style={{ color: colors.muted, fontSize: 12, fontWeight: '700' }}>{word(language, `DEMO · ${roleInfo[role].title}`, `ഡെമോ · ${roleInfo[role].ml}`)}</Text><Icon name="chevron-down-outline" size={13} color={colors.muted} /></Pressable><View style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: connectionState === 'reachable' ? colors.teal : connectionState === 'unreachable' ? colors.red : colors.amber }} /><Text style={ui.small}>{connectionLabel}</Text></View></View>
       </View>
     </View>
@@ -109,14 +146,21 @@ function RelayApp() {
         {error ? <Notice tone="error" text={localizeMessage(language, error)}><Button title={word(language, 'Dismiss', 'അടയ്ക്കുക')} tone="quiet" onPress={() => setError('')} /></Notice> : null}
         {connection.last_success_at ? <Text style={ui.small}>{word(language, 'Last successful server contact', 'അവസാനം സെർവറുമായി ബന്ധിപ്പിച്ചത്')}: {dateLabel(connection.last_success_at, language)} · {queue.length} {word(language, 'queued', 'ക്യൂവിൽ')}</Text> : <Text style={ui.small}>{word(language, 'No server contact confirmed yet. Local reports remain on this device.', 'സെർവറുമായുള്ള ബന്ധം ഇതുവരെ സ്ഥിരീകരിച്ചിട്ടില്ല. റിപ്പോർട്ടുകൾ ഈ ഉപകരണത്തിൽ നിലനിൽക്കും.')}</Text>}
         {workspaceLoading ? <View accessibilityLiveRegion="polite" style={ui.row}><ActivityIndicator color={colors.teal} /><Text style={ui.subtitle}>{word(language, 'Loading this role’s saved reports...', 'ഈ ഉപയോക്തൃവിഭാഗത്തിന്റെ റിപ്പോർട്ടുകൾ തുറക്കുന്നു...')}</Text></View> : null}
-        {route === 'home' ? <ReportsScreen key={role} role={role} language={language} reports={reports} queue={queue} onOpen={setSelectedId} onCreate={() => navigate('create')} onRelay={() => navigate('relay')} onSeed={() => void seed()} /> : null}
+        {route === 'home' && role === 'coordinator' ? <GovernmentHome language={language} reports={reports} queue={queue} config={config} tick={connection.last_attempt_at} onOpen={setSelectedId} onRefresh={refresh} onSync={() => void sync()} /> : null}
+        {route === 'home' && role === 'responder' ? <RescueHome reports={reports} queue={queue} tick={connection.last_attempt_at} onOpen={setSelectedId} /> : null}
+        {route === 'home' && role === 'relief' ? <ReliefHome reports={reports} tick={connection.last_attempt_at} onOpen={setSelectedId} /> : null}
+        {route === 'safety' ? <SafetyScreen language={language} alerts={alerts} /> : null}
+        {route === 'shelters' ? <SheltersScreen role={role} tick={connection.last_attempt_at} /> : null}
+        {route === 'home' && (role === 'citizen' || role === 'volunteer') ? <ReportsScreen key={role} role={role} language={language} reports={reports} queue={queue} onOpen={setSelectedId} onCreate={() => navigate('create')} onRelay={() => navigate('relay')} onSeed={() => void seed()} config={config} onQuickCreated={created} onAlertPublished={refresh} onNavigate={navigate} onSync={() => void sync()} syncing={syncing} lastSync={connection.last_success_at} /> : null}
         {route === 'create' && (role === 'citizen' || role === 'volunteer') ? <CreateReportScreen key={role} role={role} language={language} onCreated={created} /> : null}
         {route === 'relay' && (role === 'citizen' || role === 'volunteer') ? <RelayScreen key={`${role}:${relayId || ''}`} role={role} language={language} reports={reports} onImported={refresh} initialReportId={relayId} /> : null}
+        {route === 'map' ? <MapScreen language={language} role={role} reports={reports} tick={connection.last_attempt_at} online={!config.forceOffline && connection.state !== 'unreachable'} /> : null}
         {route === 'queue' ? <OutboxScreen role={role} language={language} queue={queue} onRefresh={refresh} onSync={() => void sync()} syncing={syncing} offline={config.forceOffline} /> : null}
         {route === 'settings' ? <SettingsScreen role={role} config={config} language={language} onRole={switchRole} onConfig={updateConfig} syncing={syncing || configSaving} queuedCount={queue.length} connection={connection} /> : null}
       </ScrollView>
     </KeyboardAvoidingView>}
     <View style={{ borderTopColor: colors.line, borderTopWidth: 1, backgroundColor: colors.paper }}><View style={{ flexDirection: 'row', width: '100%', maxWidth: 800, alignSelf: 'center' }}>{modules.filter(m => m.roles.includes(role)).map(item => <Pressable key={item.id} disabled={configSaving} accessibilityRole="tab" accessibilityLabel={word(language, item.label, item.ml)} accessibilityState={{ selected: route === item.id }} onPress={() => navigate(item.id)} style={({ pressed }) => ({ flex: 1, minHeight: 72, paddingVertical: 11, alignItems: 'center', justifyContent: 'center', gap: 5, opacity: pressed ? 0.6 : 1, borderTopWidth: 3, borderTopColor: route === item.id ? colors.teal : 'transparent' })}><View><Icon name={item.icon} color={route === item.id ? colors.teal : colors.muted} size={23} />{item.id === 'queue' && queue.length > 0 ? <View style={{ position: 'absolute', top: -6, right: -10, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>{queue.length > 9 ? '9+' : queue.length}</Text></View> : null}</View><Text style={{ color: route === item.id ? colors.teal : colors.muted, fontSize: 10, fontWeight: route === item.id ? '800' : '600', textAlign: 'center' }}>{word(language, item.label, item.ml)}</Text></Pressable>)}</View></View>
+    {popup ? <AlertPopup alert={popup} language={language} onClose={() => readAlert(popup.id)} /> : null}
     <ReportDetail report={selected} role={role} language={language} queue={queue} config={config} onClose={() => setSelectedId(undefined)} onRefresh={refresh} onRelay={showRelay} />
   </SafeAreaView>;
 }

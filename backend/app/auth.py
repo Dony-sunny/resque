@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .models import AuthSession, User
 
 bearer = HTTPBearer(auto_error=False)
-DEMO_NAMES = {"citizen": "Anu · Citizen", "volunteer": "Maya · Volunteer", "coordinator": "Arun · Coordinator", "responder": "Nila · Responder"}
+DEMO_NAMES = {"citizen": "Anu · Citizen", "volunteer": "Maya · Volunteer", "coordinator": "Arun · Coordinator", "responder": "Nila · Rescue Team Alpha", "relief": "Riya · Food & Relief"}
 
 
 def public_user(user):

@@ -9,6 +9,7 @@ class Settings:
     demo_mode: bool = False
     cors_origins: tuple[str, ...] = ()
     demo_access_key: str = ""
+    sms_secret: str = ""
 
     @classmethod
     def from_env(cls):
@@ -17,4 +18,6 @@ class Settings:
             demo_mode=os.getenv("RESQ_DEMO_MODE", "false").lower() == "true",
             cors_origins=tuple(filter(None, os.getenv("RESQ_CORS_ORIGINS", "").split(","))),
             demo_access_key=os.getenv("RESQ_DEMO_ACCESS_KEY", ""),
+            # Shared secret the SMS gateway (Twilio, MSG91, Exotel...) appends as ?key=...
+            sms_secret=os.getenv("RESQ_SMS_SECRET", ""),
         )

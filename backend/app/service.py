@@ -6,8 +6,11 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
-from .models import Report, Submission, Assignment, Note, Audit, SyncReceipt, User, now
-from .schemas import ReportInput, CreatePayload, ReviewPayload, AssignPayload, StatusPayload, NotePayload
+from uuid import NAMESPACE_URL, uuid5
+from .models import Report, Submission, Assignment, Note, Audit, SyncReceipt, User, now, IncidentDetail, DuplicateLink, MissionAssignment, RescueTeam
+from .schemas import (ReportInput, CreatePayload, ReviewPayload, AssignPayload, StatusPayload, NotePayload, DetailsPayload,
+                      LinkPayload, MissionRequestPayload, ReliefPayload)
+from . import ops, priority
 
 
 class EventError(Exception):
@@ -26,7 +29,7 @@ def iso(value):
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def serialize_report(db, report):
+def serialize_report(db, report, available=None):
     notes = db.scalars(select(Note).where(Note.report_id == report.id).order_by(Note.created_at, Note.id)).all()
     audit = db.scalars(select(Audit).where(Audit.report_id == report.id).order_by(Audit.created_at, Audit.id)).all()
     return {
@@ -41,11 +44,12 @@ def serialize_report(db, report):
         "version": report.version,
         "notes": [{"id": note.id, "text": note.text, "author_id": note.author_id, "created_at": iso(note.created_at)} for note in notes],
         "audit": [{"id": row.id, "action": row.action, "actor_id": row.actor_id, "detail": row.detail, "created_at": iso(row.created_at)} for row in audit],
+        **ops.insight(db, report, available),
     }
 
 
 def visible(db, report, user):
-    if user["role"] == "coordinator":
+    if user["role"] in ("coordinator", "relief"):
         return True
     if user["role"] == "citizen":
         return report.owner_id == user["id"]
@@ -97,7 +101,7 @@ def create_report(db, event, user):
         proof = bool(payload.receipt_token) and secrets_equal_hash(payload.receipt_token, payload.receipt_hash)
         if not proof:
             raise EventError("Citizen ownership requires the private receipt token")
-    immutable = ReportInput.model_validate(payload.model_dump(exclude={"receipt_token"})).model_dump(mode="json")
+    immutable = ReportInput.model_validate(payload.model_dump(exclude={"receipt_token", "details"})).model_dump(mode="json")
     immutable_hash = digest(immutable)
     report = db.scalar(select(Report).where(Report.id == str(payload.id)).with_for_update())
     duplicate = report is not None
@@ -124,11 +128,35 @@ def create_report(db, event, user):
         db.add(report)
         db.flush()
         audit(db, report, user, "report.received", "Server received the report; relay content is unverified" if user["role"] == "volunteer" else "Server received the citizen report")
+    if payload.details is not None and db.get(IncidentDetail, report.id) is None:
+        save_details(db, report, payload.details.model_dump(), user)
     if db.get(Submission, (report.id, user["id"])) is None:
         db.add(Submission(report_id=report.id, user_id=user["id"]))
         if duplicate and user["role"] == "volunteer":
             audit(db, report, user, "relay.received", "Additional relay carrier submitted identical report; no new incident created")
     return report, duplicate
+
+
+AUTO_RELIEF = {"food": "food_packets", "water": "water_bottles", "medicine": "medicine_kits", "shelter": "blankets"}
+
+
+def save_details(db, report, details, user):
+    """Store progressive SOS details and turn requested supplies into one relief request."""
+    row = db.get(IncidentDetail, report.id)
+    support = row.data.get("support", []) if row else []
+    if row is None:
+        row = IncidentDetail(report_id=report.id, data={})
+        db.add(row)
+    row.data = {**details, "support": support}
+    row.updated_at = now()
+    people = priority.people_counts(details, report.affected_count)
+    amounts = {"food_packets": people["affected"] * 3, "water_bottles": people["affected"] * 3,
+               "medicine_kits": max(1, people["injured"] * 2), "blankets": people["affected"]}
+    items = {AUTO_RELIEF[need]: amounts[AUTO_RELIEF[need]] for need in details.get("assistance", []) if need in AUTO_RELIEF}
+    request_id = str(uuid5(NAMESPACE_URL, f"resq-auto-relief:{report.id}"))
+    if items and db.get(ops.ReliefRequest, request_id) is None:
+        ops.create_relief(db, request_id, report.id, user, items, "Requested in the SOS report")
+    db.flush()
 
 
 def secrets_equal_hash(token, expected):
@@ -160,25 +188,49 @@ def mutate_report(db, event, user):
             raise EventError("Verify the report before assigning a responder")
         if report.mission_status == "completed":
             raise EventError("A completed mission cannot be reassigned")
-        responder = db.get(User, data.responder_id)
+        team = None
+        if data.team_id is not None:
+            team = db.get(RescueTeam, data.team_id)
+            if team is None:
+                raise EventError("Choose an existing rescue team")
+            view = ops.team_view(db, team)
+            if view["mission_id"] and view["mission_id"] != report.id:
+                raise EventError(f"{team.name} is already on another mission; choose an available team")
+            if not team.on_duty:
+                raise EventError(f"{team.name} is off duty")
+            responder = db.get(User, team.lead_user_id)
+        else:
+            responder = db.get(User, data.responder_id)
         if responder is None or responder.role != "responder" or not responder.active:
             raise EventError("Choose an active field responder")
         db.execute(update(Assignment).where(Assignment.report_id == report.id, Assignment.active.is_(True)).values(active=False))
+        db.execute(update(MissionAssignment).where(MissionAssignment.report_id == report.id, MissionAssignment.active.is_(True)).values(active=False))
         db.add(Assignment(report_id=report.id, responder_id=responder.id, coordinator_id=user["id"]))
+        if team is None:
+            team = db.scalar(select(RescueTeam).where(RescueTeam.lead_user_id == responder.id))
+            if team is not None and ops.active_assignment(db, team.id) not in (None, report):
+                raise EventError(f"{team.name} is already on another mission; choose an available team")
+        if team is not None:
+            db.add(MissionAssignment(report_id=report.id, team_id=team.id, assigned_by=user["id"]))
+        previous = report.mission_status
         report.assigned_to = responder.id
         report.mission_status = "assigned"
-        audit(db, report, user, "report.assigned", f"Assigned to {responder.id}")
+        audit(db, report, user, "report.assigned", f"Assigned to {team.name if team else responder.id}")
+        ops.log(db, user["id"], "mission.assigned", "incident", report.id, report.id, previous, "assigned", team.name if team else responder.id)
     elif event.kind == "mission.status":
         require_role(user, "responder")
         if report.assigned_to != user["id"]:
             raise EventError("Only the currently assigned responder can update this mission")
         data = StatusPayload.model_validate(event.payload)
         check_version(report, data)
-        allowed = {"assigned": "accepted", "accepted": "en_route", "en_route": "on_scene", "on_scene": "completed"}
-        if allowed.get(report.mission_status) != data.status:
+        allowed = {"assigned": ("accepted",), "accepted": ("en_route",), "en_route": ("on_scene",),
+                   "on_scene": ("in_progress", "completed"), "in_progress": ("completed",)}
+        if data.status not in allowed.get(report.mission_status, ()):
             raise EventError(f"Invalid mission transition from {report.mission_status} to {data.status}")
+        previous = report.mission_status
         report.mission_status = data.status
         audit(db, report, user, "mission.status", data.status)
+        ops.log(db, user["id"], "mission.status", "incident", report.id, report.id, previous, data.status)
     elif event.kind == "mission.note":
         require_role(user, "responder")
         if report.assigned_to != user["id"]:
@@ -191,6 +243,59 @@ def mutate_report(db, event, user):
             raise EventError("Note ID already has different content", "conflict")
         db.add(Note(id=str(data.id), report_id=report.id, author_id=user["id"], text=data.text, created_at=data.created_at))
         audit(db, report, user, "mission.note", f"Added note {data.id}")
+    elif event.kind == "report.details":
+        data = DetailsPayload.model_validate(event.payload)
+        allowed = user["role"] == "coordinator" or report.owner_id == user["id"] or db.get(Submission, (report.id, user["id"])) is not None
+        if not allowed:
+            raise EventError("Only the reporter, a relay carrier or a coordinator can update SOS details")
+        save_details(db, report, data.model_dump(), user)
+        audit(db, report, user, "report.details", "SOS details updated")
+    elif event.kind == "report.link_duplicate":
+        require_role(user, "coordinator")
+        data = LinkPayload.model_validate(event.payload)
+        link = db.get(DuplicateLink, report.id)
+        if data.duplicate_of is None:
+            if link:
+                db.delete(link)
+            audit(db, report, user, "report.unlinked", "Duplicate link removed")
+        else:
+            target = str(data.duplicate_of)
+            if target == report.id or db.get(Report, target) is None:
+                raise EventError("Choose a different existing report to link")
+            if link:
+                link.duplicate_of = target
+            else:
+                db.add(DuplicateLink(report_id=report.id, duplicate_of=target, linked_by=user["id"]))
+            audit(db, report, user, "report.linked", f"Linked as possible duplicate of {target[:8]}; the report is kept")
+            ops.log(db, user["id"], "incident.linked", "incident", report.id, report.id, None, "duplicate", target)
+    elif event.kind == "mission.request":
+        require_role(user, "responder")
+        if report.assigned_to != user["id"]:
+            raise EventError("Only the assigned rescue team can request support for this mission")
+        data = MissionRequestPayload.model_validate(event.payload)
+        if data.kind == "supplies":
+            try:
+                ops.create_relief(db, str(data.id), report.id, user, data.items, data.note or "Requested by rescue team")
+            except ops.OpsError as exc:
+                raise EventError(exc.message)
+        row = db.get(IncidentDetail, report.id)
+        if row is None:
+            row = IncidentDetail(report_id=report.id, data={})
+            db.add(row)
+        support = [entry for entry in row.data.get("support", []) if entry.get("id") != str(data.id)]
+        row.data = {**row.data, "support": [*support, {"id": str(data.id), "kind": data.kind, "note": data.note, "items": data.items, "by": user["id"], "at": iso(now())}]}
+        audit(db, report, user, f"mission.request_{data.kind}", data.note or data.kind)
+        ops.log(db, user["id"], f"mission.request_{data.kind}", "incident", report.id, report.id, None, None, data.note)
+    elif event.kind == "relief.request":
+        require_role(user, "citizen", "volunteer", "responder", "coordinator")
+        data = ReliefPayload.model_validate(event.payload)
+        if user["role"] == "citizen" and report.owner_id != user["id"]:
+            raise EventError("Citizens can request relief only for their own SOS")
+        try:
+            ops.create_relief(db, str(data.id), report.id, user, data.items, data.note)
+        except ops.OpsError as exc:
+            raise EventError(exc.message)
+        audit(db, report, user, "relief.requested", ", ".join(f"{k}x{v}" for k, v in data.items.items()))
     else:
         raise EventError("Unsupported event kind")
     touch(report)

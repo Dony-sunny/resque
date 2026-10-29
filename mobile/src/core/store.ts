@@ -1,4 +1,4 @@
-import type { Config, EventKind, QueueItem, Report, ReportDraft, ReportInput, Role, ServerReport, User } from './types';
+import type { Config, Details, EventKind, QueueItem, Report, ReportDraft, ReportInput, Role, ServerReport, User } from './types';
 import { immutableInput, parseRelay, validateDraft } from './relay';
 
 export interface SqlConnection {
@@ -9,9 +9,17 @@ export interface SqlConnection {
 }
 export interface SqlDatabase extends SqlConnection { withExclusiveTransactionAsync(task: (tx: SqlConnection) => Promise<void>): Promise<void> }
 export interface StoreDependencies { id(): string; token(): string; hash(text: string): Promise<string>; now?(): number }
-export const demoUser = (role: Role): User => ({ id: `demo-${role}`, name: ({ citizen: 'Anu · Citizen', volunteer: 'Maya · Volunteer', coordinator: 'Arun · Coordinator', responder: 'Nila · Responder' })[role], role });
-export const DEFAULT_CONFIG: Config = { apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:8000', language: 'en', forceOffline: false };
+export const demoUser = (role: Role): User => ({ id: `demo-${role}`, name: ({ citizen: 'Anu · Citizen', volunteer: 'Maya · Volunteer', coordinator: 'Arun · Government', responder: 'Nila · Rescue Team Alpha', relief: 'Riya · Food & Relief' })[role], role });
+export const DEFAULT_CONFIG: Config = { apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:8000', language: 'en', forceOffline: false, smsNumber: process.env.EXPO_PUBLIC_SMS_NUMBER || '' };
 const baseReport = (input: ReportInput, source: Report['source']): Report => ({ ...input, source, delivery_state: 'pending', verification: 'unverified', urgency: null, urgency_reasons: [], assigned_to: null, mission_status: 'unassigned', updated_at: input.created_at, version: 0, notes: [], audit: [] });
+/** Whitelist and bound progressive SOS details before they are queued. */
+export function cleanDetails(value: Details): Details {
+  const count = (n: unknown) => Math.max(0, Math.min(10000, Math.floor(Number(n) || 0)));
+  const people = value.people || ({} as Details['people']);
+  const needs = ['rescue', 'ambulance', 'medical', 'food', 'water', 'medicine', 'shelter'];
+  return { people: { trapped: count(people.trapped), injured: count(people.injured), children: count(people.children), elderly: count(people.elderly), disabled: count(people.disabled) },
+    life_threat: !!value.life_threat, assistance: [...new Set((value.assistance || []).filter(a => needs.includes(a)))] as Details['assistance'] };
+}
 const sameInput = (a: ReportInput, b: ReportInput) => JSON.stringify(immutableInput(a)) === JSON.stringify(immutableInput(b));
 
 export class LocalStore {
@@ -105,8 +113,9 @@ export class LocalStore {
     if (!['citizen', 'volunteer'].includes(user.role)) throw new Error('This role cannot create reports.');
     const checked = validateDraft(draft), token = this.deps.token();
     const input: ReportInput = { ...checked, id: this.deps.id(), origin_id: user.id, created_at: new Date(this.now()).toISOString(), receipt_hash: await this.deps.hash(token) };
-    const report = { ...baseReport(input, user.role === 'citizen' ? 'own' : 'collected'), ...(user.role === 'citizen' ? { receipt_token: token } : {}) };
-    const payload = { ...input, ...(user.role === 'citizen' ? { receipt_token: token } : {}) };
+    const details = draft.details ? cleanDetails(draft.details) : undefined;
+    const report = { ...baseReport(input, user.role === 'citizen' ? 'own' : 'collected'), ...(user.role === 'citizen' ? { receipt_token: token } : {}), ...(details ? { details } : {}) };
+    const payload = { ...input, ...(user.role === 'citizen' ? { receipt_token: token } : {}), ...(details ? { details } : {}) };
     await this.atomic(async tx => { await this.putReport(tx, user.id, report); await this.putQueue(tx, user.id, this.event('report.create', report.id, payload)); });
     return report;
   }
@@ -127,7 +136,8 @@ export class LocalStore {
     });
   }
   async enqueueAction(user: User, kind: EventKind, reportId: string, payload: Record<string, unknown>): Promise<void> {
-    const allowed = user.role === 'coordinator' ? ['report.review', 'report.assign'] : user.role === 'responder' ? ['mission.status', 'mission.note'] : [];
+    const allowed = ({ coordinator: ['report.review', 'report.assign', 'report.link_duplicate', 'report.details', 'relief.request'], responder: ['mission.status', 'mission.note', 'mission.request'],
+      citizen: ['report.details', 'relief.request'], volunteer: ['report.details', 'relief.request'], relief: [] } as Record<Role, EventKind[]>)[user.role];
     if (!allowed.includes(kind)) throw new Error('This role cannot perform this action.');
     await this.atomic(async tx => {
       const row = await tx.getFirstAsync<{ data: string }>('SELECT data FROM reports WHERE user_id=? AND id=?', user.id, reportId);
@@ -137,6 +147,8 @@ export class LocalStore {
       if (payload.expected_version !== undefined && payload.expected_version !== report.version) throw new Error('Report changed since this form was opened. Refresh and review the latest state before saving.');
       const prior = (await tx.getAllAsync<{ data: string }>('SELECT data FROM outbox WHERE user_id=? AND report_id=? ORDER BY sequence', user.id, reportId)).map(saved => JSON.parse(saved.data) as QueueItem);
       if (prior.some(item => item.status === 'blocked' || item.status === 'conflict')) throw new Error('Resolve or dismiss the earlier blocked action before queueing more changes for this report.');
+      if (kind === 'report.details') payload = cleanDetails(payload as unknown as Details) as unknown as Record<string, unknown>;
+      if (kind === 'mission.request' || kind === 'relief.request') payload = { ...payload, id: payload.id || this.deps.id() };
       if (kind === 'mission.note') {
         if (typeof payload.text !== 'string' || !payload.text.trim() || payload.text.length > 1500) throw new Error('Note must contain 1–1,500 characters.');
         payload = { ...payload, text: payload.text.trim(), id: payload.id || this.deps.id(), created_at: payload.created_at || new Date(this.now()).toISOString() };

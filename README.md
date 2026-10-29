@@ -1,3 +1,34 @@
+# RESQ — Intelligent Disaster Response & Rescue Prioritization
+
+**Collect Faster. Respond Smarter.** One offline-first Expo (React Native) app with four connected roles
+backed by one FastAPI service and database:
+
+| Role (Settings → Choose a workspace) | What it does |
+|---|---|
+| **Victim / Citizen** | One-tap SOS + Call 112, 3-step SOS (hazard → location → people), tracking, shelters, alerts, safety guides |
+| **Government Official** | Live KPIs, explainable priority queue, "Why this priority?", resources Required/Available/Shortfall, team recommendations + assignment, duplicates, alerts, demo controls |
+| **Rescue Team** | Assigned missions, accept → en route → on site → in progress → resolved, backup/medical/supply requests, availability |
+| **Food & Relief** | Stock with reservations, request pipeline (approve → pack → dispatch → deliver/cancel), shelters occupancy |
+
+Community volunteers (QR relay) remain available. Feature audit and SAKSHAM/SURVORA comparison:
+[RESQ_REBUILD_AUDIT.md](RESQ_REBUILD_AUDIT.md). All demo data is **SIMULATED** (Kottayam, Kerala).
+
+### Run, test, build
+```powershell
+# backend (terminal 1)
+cd backend; python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:RESQ_DEMO_MODE = "true"; .\.venv\Scripts\python.exe -m app.seed      # Kottayam scenario (safe to repeat)
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000  # health: /health, dashboard: /dashboard
+.\.venv\Scripts\python.exe -m pytest -q                                      # backend tests
+# mobile (terminal 2)
+cd mobile; npm install; npm start          # open in Expo Go (SDK 55); set the backend address in Settings
+npm run check                              # typecheck + tests
+npm run export:android                     # production JS bundle
+```
+Phone over USB: `adb reverse tcp:8081 tcp:8081` and `adb reverse tcp:8000 tcp:8000`, then use `http://localhost:8000`.
+
+---
+
 # ResQ Relay
 
 Android-first disaster reporting for **Project Nevermore 2026**. React Native + Expo +
