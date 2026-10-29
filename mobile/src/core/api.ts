@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import type { AssistantReply } from './assistant';
 import type { AlertInput, AuditRow, AuthorityAlert, BackendHealth, InventoryView, OpsSummary, ReliefRequestView, Role, ServerReport, ShelterView, SyncEvent, SyncResponse, TeamView, Transport, User } from './types';
 
 export function normalizeApiUrl(value: string): string {
@@ -79,6 +80,8 @@ export class ApiClient implements Transport {
   setOccupancy(id: string, occupancy: number): Promise<ShelterView> { return this.post(`/shelters/${id}/occupancy`, { occupancy }); }
   escalate(reportId: string): Promise<ServerReport> { return this.post(`/incidents/${reportId}/escalate`); }
   auditLog(): Promise<AuditRow[]> { return this.authenticated('/audit'); }
+  releaseTeam(reportId: string): Promise<ServerReport> { return this.post(`/incidents/${reportId}/release`); }
+  ask(message: string, reportId?: string): Promise<AssistantReply> { return this.post('/assistant', reportId ? { message, report_id: reportId } : { message }); }
   demoReset(): Promise<Record<string, number>> { return this.post('/demo/reset'); }
   demoSimulate(): Promise<{ created: string[]; advanced: { team: string; status: string }[] }> { return this.post('/demo/simulate'); }
   health(): Promise<BackendHealth> { return this.request('/health'); }

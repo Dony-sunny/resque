@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Switch, Text, TextInput, View } from 'react-native';
-import type { Config, InventoryView, OpsSummary, Priority, PriorityLevel, QueueItem, ReliefRequestView, Report, ResourceRow, Role, ShelterView, TeamView } from '../core/types';
+import type { AuditRow, AuthorityAlert, Config, InventoryView, OpsSummary, Priority, PriorityLevel, QueueItem, ReliefRequestView, Report, ResourceRow, Role, ShelterView, TeamView } from '../core/types';
 import * as service from '../core/services';
 import { Badge, Button, Chip, Empty, Icon, Notice, SectionHeading, type IconName } from '../ui/components';
 import { colors, ui } from '../ui/theme';
@@ -8,13 +8,15 @@ import { dateLabel, friendly, incidentName, type Language } from '../ui/words';
 import { AlertComposer } from './Alerts';
 import { reliefLabel } from './Tracker';
 
-export const levelColor: Record<PriorityLevel, string> = { CRITICAL: colors.red, HIGH: '#D9601A', MEDIUM: '#B7860B', LOW: '#2F6FB0' };
+export const levelColor: Record<PriorityLevel, string> = { CRITICAL: colors.red, HIGH: colors.orange, MEDIUM: '#CA8A04', LOW: '#64748B' };
+/** Text on a priority colour; orange and yellow need dark text for contrast. */
+const levelText: Record<PriorityLevel, string> = { CRITICAL: '#FFFFFF', HIGH: colors.navy, MEDIUM: colors.navy, LOW: '#FFFFFF' };
 const factorName = { severity: 'Severity', vulnerability: 'Vulnerability', people: 'People affected', waiting: 'Waiting time', confidence: 'Verification confidence' };
 
 export function PriorityBadge({ priority }: { priority?: Priority }) {
   if (!priority) return <Badge label="PRIORITY AFTER SYNC" />;
   return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: levelColor[priority.level], borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, alignSelf: 'flex-start' }}>
-    <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 12 }}>{priority.level}</Text><Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 12 }}>{priority.score}</Text>
+    <Text style={{ color: levelText[priority.level], fontWeight: '900', fontSize: 12 }}>{priority.level}</Text><Text style={{ color: levelText[priority.level], fontWeight: '700', fontSize: 12 }}>{priority.score}</Text>
   </View>;
 }
 
@@ -89,8 +91,8 @@ export function IncidentRow({ report, onPress, pending }: { report: Report; onPr
 }
 
 /** Government official: KPIs, alerts, demo controls and the explainable priority queue. */
-export function GovernmentHome({ language, reports, queue, config, tick, onOpen, onRefresh, onSync }: {
-  language: Language; reports: Report[]; queue: QueueItem[]; config: Config; tick: unknown; onOpen: (id: string) => void; onRefresh: () => Promise<void>; onSync: () => void;
+export function GovernmentHome({ view, language, reports, queue, config, tick, onOpen, onRefresh, onSync, onIncidents }: {
+  view: 'overview' | 'incidents'; language: Language; reports: Report[]; queue: QueueItem[]; config: Config; tick: unknown; onOpen: (id: string) => void; onRefresh: () => Promise<void>; onSync: () => void; onIncidents: () => void;
 }) {
   const [summary, reload] = useOps<OpsSummary>('coordinator', 'summary', api => api.summary(), tick);
   const [filter, setFilter] = useState<'open' | 'critical' | 'unassigned' | 'unverified' | 'duplicates' | 'all'>('open');
@@ -111,8 +113,15 @@ export function GovernmentHome({ language, reports, queue, config, tick, onOpen,
     finally { setBusy(''); }
   }
   const s = summary?.data;
-  return <View style={{ gap: 16 }}>
-    <SectionHeading title="Command centre" caption="Kottayam district · incidents ranked by explainable priority" />
+  if (view === 'incidents') return <View style={{ gap: 14 }}>
+    <SectionHeading title="Incident queue" caption={`${ranked.length} incident(s) · highest priority first · deterministic score`} />
+    <TextInput value={search} onChangeText={setSearch} placeholder="Search ID, place or type" placeholderTextColor="#6B7A8C" style={ui.input} accessibilityLabel="Search incidents" />
+    <View style={ui.row}>{(['open', 'critical', 'unassigned', 'unverified', 'duplicates', 'all'] as const).map(f => <Chip key={f} label={f === 'open' ? 'Unresolved' : f[0].toUpperCase() + f.slice(1)} active={filter === f} onPress={() => setFilter(f)} />)}</View>
+    {ranked.length ? ranked.map(r => <IncidentRow key={r.id} report={r} pending={queue.filter(q => q.report_id === r.id).length} onPress={() => onOpen(r.id)} />) : <Empty title="No incidents match" text="Sync to load incidents, or run the simulation." />}
+  </View>;
+  const critical = reports.filter(r => r.source !== 'seed' && isOpen(r) && r.priority?.level === 'CRITICAL' && !r.assigned_to).sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0)).slice(0, 3);
+  return <View style={{ gap: 14 }}>
+    <SectionHeading title="Command centre" caption="Kottayam district · live operational picture" />
     <CacheNote state={summary} />
     {s ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
       <Stat value={s.active_sos} label="Active SOS" icon="alert-circle-outline" />
@@ -124,26 +133,71 @@ export function GovernmentHome({ language, reports, queue, config, tick, onOpen,
     </View> : null}
     {s?.shortages.length ? <Notice tone="error" title="District resource shortages" text={s.shortages.map(x => `${x.key.replace(/_/g, ' ')}: need ${x.required}, have ${x.available}`).join(' · ')} /> : null}
     {s?.low_stock.length ? <Notice tone="warning" title="Low stock" text={s.low_stock.map(i => `${i.name} (${i.available} left)`).join(', ')} /> : null}
+    <View style={ui.between}><Text style={ui.h2}>Critical · needs a team</Text><Pressable accessibilityRole="button" onPress={onIncidents} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.teal, fontWeight: '700' }}>Full queue ›</Text></Pressable></View>
+    {critical.length ? critical.map(r => <IncidentRow key={r.id} report={r} pending={queue.filter(q => q.report_id === r.id).length} onPress={() => onOpen(r.id)} />) : <Text style={ui.small}>No unassigned critical incidents.</Text>}
     <View style={ui.card}><Text style={ui.h3}>Demo controls</Text>
       <Text style={ui.small}>Simulation data is clearly labelled SIMULATED. Reset restores the known Kottayam scenario without deleting real reports.</Text>
       <View style={{ flexDirection: 'row', gap: 10 }}><Button style={{ flex: 1 }} title="Run simulation" icon="play-outline" tone="secondary" loading={busy === 'simulate'} onPress={() => void demo('simulate')} /><Button style={{ flex: 1 }} title="Reset demo" icon="refresh-outline" tone="quiet" loading={busy === 'reset'} onPress={() => void demo('reset')} /></View>
       {message ? <Notice text={message} /> : null}
     </View>
     <AlertComposer language={language} config={config} onPublished={onRefresh} />
-    <SectionHeading title="Priority queue" caption={`${ranked.length} incident(s) · highest priority first`} />
-    <TextInput value={search} onChangeText={setSearch} placeholder="Search ID, place or type" placeholderTextColor="#657D83" style={ui.input} accessibilityLabel="Search incidents" />
-    <View style={ui.row}>{(['open', 'critical', 'unassigned', 'unverified', 'duplicates', 'all'] as const).map(f => <Chip key={f} label={f === 'open' ? 'Unresolved' : f[0].toUpperCase() + f.slice(1)} active={filter === f} onPress={() => setFilter(f)} />)}</View>
-    {ranked.length ? ranked.map(r => <IncidentRow key={r.id} report={r} pending={queue.filter(q => q.report_id === r.id).length} onPress={() => onOpen(r.id)} />) : <Empty title="No incidents match" text="Sync to load incidents, or run the simulation." />}
+  </View>;
+}
+
+/** All rescue teams with live mission state. Officials can change availability; busy teams cannot go off duty. */
+export function TeamsScreen({ role, tick, onOpen }: { role: Role; tick: unknown; onOpen: (id: string) => void }) {
+  const [teams, reload] = useOps<TeamView[]>(role, 'teams', api => api.teams(), tick);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  async function toggle(team: TeamView, onDuty: boolean) {
+    setBusy(team.id); setError('');
+    try { await service.act(role, api => api.setAvailability(team.id, onDuty)); await reload(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Could not change availability'); }
+    finally { setBusy(''); }
+  }
+  return <View style={{ gap: 14 }}>
+    <SectionHeading title="Rescue teams" caption="A team on a mission is never offered for another assignment." />
+    <CacheNote state={teams} />
+    {error ? <Notice tone="error" text={error} /> : null}
+    {(teams?.data || []).map(t => <View key={t.id} style={ui.card}>
+      <View style={ui.between}><Text style={[ui.h3, { flex: 1 }]}>{t.name}</Text><Badge label={t.mission_id ? 'ON MISSION' : t.on_duty ? 'AVAILABLE' : 'OFF DUTY'} tone={t.mission_id ? 'warning' : t.on_duty ? 'success' : 'neutral'} /></View>
+      <Text style={ui.small}>{t.capacity} members · {t.capabilities.join(', ')} · readiness {t.readiness}% · base {t.base}{t.simulated ? ' · SIMULATED' : ''}</Text>
+      {t.mission_id ? <Pressable accessibilityRole="button" onPress={() => onOpen(t.mission_id!)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.teal, fontWeight: '700' }}>Mission #{t.mission_id.slice(0, 8)} · {friendly(t.mission_status || '')} ›</Text></Pressable> : null}
+      {role === 'coordinator' ? <View style={ui.between}><Text style={ui.small}>On duty</Text><Switch value={t.on_duty} disabled={busy === t.id || !!t.mission_id} onValueChange={v => void toggle(t, v)} accessibilityLabel={`${t.name} on duty`} trackColor={{ false: '#9AA8B8', true: colors.teal }} thumbColor="#FFFFFF" /></View> : null}
+    </View>)}
+  </View>;
+}
+
+/** Chronological record of every operational change, with previous and new status. */
+export function AuditScreen({ role, tick }: { role: Role; tick: unknown }) {
+  const [rows] = useOps<AuditRow[]>(role, 'audit', api => api.auditLog(), tick);
+  return <View style={{ gap: 10 }}>
+    <SectionHeading title="Audit log" caption="Who changed what, and when. Latest first." />
+    <CacheNote state={rows} />
+    {(rows?.data || []).slice(0, 60).map(r => <View key={r.id} style={[ui.card, { padding: 12, gap: 4 }]}>
+      <View style={ui.between}><Text style={[ui.small, { fontWeight: '800', color: colors.navy }]}>{r.action}</Text><Text style={ui.small}>{dateLabel(r.created_at)}</Text></View>
+      <Text style={ui.small}>{r.actor} · {r.entity} {r.entity_id.slice(0, 12)}{r.previous_status || r.new_status ? ` · ${r.previous_status || '—'} → ${r.new_status || '—'}` : ''}{r.detail ? ` · ${r.detail}` : ''}</Text>
+    </View>)}
   </View>;
 }
 
 /** Rescue team: own team status, availability and missions ranked by priority. */
+export function RescueUpdates({ reports, alerts, onOpen }: { reports: Report[]; alerts: AuthorityAlert[]; onOpen: (id: string) => void }) {
+  const done = reports.filter(r => r.source !== 'seed' && r.mission_status === 'completed');
+  return <View style={{ gap: 14 }}>
+    <SectionHeading title="Updates" caption="Official alerts and this team's mission history." />
+    {alerts.length ? alerts.map(a => <Notice key={a.id} tone={a.severity === 'danger' ? 'error' : 'warning'} title={a.title} text={`${a.body} · ${a.area} · ${dateLabel(a.created_at)}`} />) : <Text style={ui.small}>No active official alerts.</Text>}
+    <Text style={ui.h3}>Completed missions</Text>
+    {done.length ? done.map(r => <IncidentRow key={r.id} report={r} onPress={() => onOpen(r.id)} />) : <Text style={ui.small}>No completed missions yet.</Text>}
+  </View>;
+}
+
 export function RescueHome({ reports, queue, tick, onOpen }: { reports: Report[]; queue: QueueItem[]; tick: unknown; onOpen: (id: string) => void }) {
   const [teams, reload] = useOps<TeamView[]>('responder', 'teams', api => api.teams(), tick);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const mine = teams?.data?.find(t => t.lead_user_id === 'demo-responder');
-  const missions = reports.filter(r => r.source !== 'seed').sort((a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || (b.priority?.score ?? 0) - (a.priority?.score ?? 0));
+  const missions = reports.filter(r => r.source !== 'seed' && isOpen(r)).sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0));
   async function availability(onDuty: boolean) {
     if (!mine) return;
     setSaving(true); setError('');
@@ -176,10 +230,16 @@ const nextAction: Partial<Record<string, { action: 'approve' | 'pack' | 'dispatc
 };
 
 /** Food & relief: inventory with reservations, request pipeline and dispatch. */
-export function ReliefHome({ reports, tick, onOpen }: { reports: Report[]; tick: unknown; onOpen: (id: string) => void }) {
-  const [stock, reloadStock] = useOps<InventoryView[]>('relief', 'inventory', api => api.inventory(), tick);
-  const [requests, reloadRequests] = useOps<ReliefRequestView[]>('relief', 'requests', api => api.reliefRequests(), tick);
-  const [filter, setFilter] = useState<'active' | 'requested' | 'approved' | 'packed' | 'dispatched' | 'done'>('active');
+const reliefViews = {
+  requests: { title: 'Relief requests', caption: 'Approve to reserve stock. Stock can never go negative.', filters: ['requested', 'approved', 'cancelled'] },
+  dispatch: { title: 'Dispatch', caption: 'Pack, dispatch and confirm delivery. Each request is dispatched once.', filters: ['approved', 'packed', 'dispatched', 'delivered'] },
+} as const;
+
+export function ReliefHome({ view, role = 'relief', reports, tick, onOpen }: { view: 'requests' | 'inventory' | 'dispatch'; role?: Role; reports: Report[]; tick: unknown; onOpen: (id: string) => void }) {
+  const [stock, reloadStock] = useOps<InventoryView[]>(role, 'inventory', api => api.inventory(), tick);
+  const [requests, reloadRequests] = useOps<ReliefRequestView[]>(role, 'requests', api => api.reliefRequests(), tick);
+  const [filter, setFilter] = useState<string>(view === 'dispatch' ? 'packed' : 'requested');
+  useEffect(() => setFilter(view === 'dispatch' ? 'packed' : 'requested'), [view]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -195,29 +255,35 @@ export function ReliefHome({ reports, tick, onOpen }: { reports: Report[]; tick:
     catch (e) { setError(e instanceof Error ? e.message : 'Restock failed'); }
     finally { setBusy(''); }
   }
-  const rows = (requests?.data || []).filter(r => filter === 'active' ? ['requested', 'approved', 'packed', 'dispatched'].includes(r.status) : filter === 'done' ? ['delivered', 'cancelled'].includes(r.status) : r.status === filter);
+  const rows = (requests?.data || []).filter(r => r.status === filter);
   const supplies = (stock?.data || []).filter(i => i.kind === 'supply'), assets = (stock?.data || []).filter(i => i.kind === 'asset');
   const count = (status: string) => (requests?.data || []).filter(r => r.status === status).length;
-  return <View style={{ gap: 16 }}>
-    <SectionHeading title="Relief operations" caption="Allocate, pack, dispatch and deliver. Stock can never go negative." />
-    <CacheNote state={requests} />
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-      <Stat value={count('requested')} label="New requests" color="#D9601A" icon="mail-unread-outline" />
-      <Stat value={count('approved') + count('packed')} label="Allocated / packed" color="#B7860B" icon="cube-outline" />
-      <Stat value={count('dispatched')} label="On the way" color={colors.teal} icon="car-outline" />
-      <Stat value={supplies.filter(i => i.low).length} label="Low-stock items" color={colors.red} icon="warning-outline" />
-    </View>
-    {error ? <Notice tone="error" text={error} /> : null}{message ? <Notice text={message} /> : null}
+  if (view === 'inventory') return <View style={{ gap: 14 }}>
+    <SectionHeading title="Inventory" caption="Total, reserved for approved requests, and free to allocate." />
+    <CacheNote state={stock} />
+    {error ? <Notice tone="error" text={error} /> : null}
     <View style={ui.card}><Text style={ui.h3}>Stock</Text>
       {supplies.map(i => <View key={i.key} style={{ gap: 4, paddingVertical: 4 }}>
         <View style={ui.between}><Text style={[ui.text, { fontWeight: '700', flex: 1 }]}>{i.name}</Text>{i.low ? <Badge label="LOW STOCK" tone="danger" /> : null}</View>
         <Text style={ui.small}>Total {i.total} · reserved {i.reserved} · available {i.available} {i.unit}</Text>
         <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.line, overflow: 'hidden', flexDirection: 'row' }}><View style={{ width: `${i.total ? (i.reserved / i.total) * 100 : 0}%`, backgroundColor: '#B7860B' }} /><View style={{ width: `${i.total ? (i.available / i.total) * 100 : 0}%`, backgroundColor: colors.teal }} /></View>
-        <Button title="+100 received" tone="quiet" icon="add-outline" loading={busy === `restock:${i.key}`} onPress={() => void restock(i.key)} />
+        {role === 'relief' ? <Button title="+100 received" tone="quiet" icon="add-outline" loading={busy === `restock:${i.key}`} onPress={() => void restock(i.key)} /> : null}
       </View>)}
       {assets.length ? <Text style={ui.small}>Assets: {assets.map(a => `${a.name} ${a.available}`).join(' · ')}</Text> : null}
     </View>
-    <View style={ui.row}>{(['active', 'requested', 'approved', 'packed', 'dispatched', 'done'] as const).map(f => <Chip key={f} label={f[0].toUpperCase() + f.slice(1)} active={filter === f} onPress={() => setFilter(f)} />)}</View>
+  </View>;
+  const copy = reliefViews[view];
+  return <View style={{ gap: 14 }}>
+    <SectionHeading title={copy.title} caption={copy.caption} />
+    <CacheNote state={requests} />
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+      <Stat value={count('requested')} label="New requests" color={colors.amber} icon="mail-unread-outline" />
+      <Stat value={count('approved') + count('packed')} label="Allocated / packed" color={colors.navy} icon="cube-outline" />
+      <Stat value={count('dispatched')} label="On the way" color={colors.teal} icon="car-outline" />
+      <Stat value={supplies.filter(i => i.low).length} label="Low-stock items" color={colors.red} icon="warning-outline" />
+    </View>
+    {error ? <Notice tone="error" text={error} /> : null}{message ? <Notice text={message} /> : null}
+    <View style={ui.row}>{copy.filters.map(f => <Chip key={f} label={`${f[0].toUpperCase() + f.slice(1)} (${count(f)})`} active={filter === f} onPress={() => setFilter(f)} />)}</View>
     {rows.length ? rows.map(r => {
       const incident = reports.find(x => x.id === r.incident_id), next = nextAction[r.status];
       return <View key={r.id} style={ui.card}>

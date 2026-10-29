@@ -1,18 +1,46 @@
 import type { Role } from '../core/types';
 import type { IconName } from '../ui/components';
 
-export type Route = 'home' | 'create' | 'relay' | 'map' | 'safety' | 'shelters' | 'queue' | 'settings';
-/** Register new modules here. Server permissions remain authoritative. */
-export const modules: { id: Route; roles: Role[]; label: string; ml: string; icon: IconName }[] = [
-  { id: 'home', roles: ['citizen', 'volunteer', 'coordinator', 'responder', 'relief'], label: 'Home', ml: 'ഹോം', icon: 'grid-outline' },
-  { id: 'create', roles: ['citizen', 'volunteer'], label: 'Report', ml: 'റിപ്പോർട്ട്', icon: 'add-circle-outline' },
-  { id: 'relay', roles: ['volunteer'], label: 'Relay', ml: 'കൈമാറ്റം', icon: 'qr-code-outline' },
-  { id: 'shelters', roles: ['relief', 'coordinator'], label: 'Shelters', ml: 'ക്യാമ്പുകൾ', icon: 'home-outline' },
-  { id: 'map', roles: ['citizen', 'volunteer', 'coordinator', 'responder', 'relief'], label: 'Map', ml: 'ഭൂപടം', icon: 'map-outline' },
-  { id: 'safety', roles: ['citizen', 'volunteer'], label: 'Safety', ml: 'സുരക്ഷ', icon: 'shield-checkmark-outline' },
-  { id: 'queue', roles: ['citizen', 'volunteer', 'coordinator', 'responder'], label: 'Outbox', ml: 'ഔട്ട്ബോക്സ്', icon: 'swap-vertical-outline' },
-  { id: 'settings', roles: ['citizen', 'volunteer', 'coordinator', 'responder', 'relief'], label: 'Settings', ml: 'ക്രമീകരണം', icon: 'options-outline' },
-];
+export type Route = 'home' | 'create' | 'requests' | 'safety' | 'assistant' | 'relay' | 'map' | 'shelters' | 'queue' | 'settings'
+  | 'incidents' | 'teams' | 'more' | 'audit' | 'updates' | 'resources' | 'inventory' | 'dispatch';
+type Tab = { id: Route; label: string; ml: string; icon: IconName };
+
+/** Bottom navigation per role. Server permissions remain authoritative; other routes open from inside screens. */
+export const tabs: Record<Role, Tab[]> = {
+  citizen: [
+    { id: 'home', label: 'Home', ml: 'ഹോം', icon: 'home-outline' },
+    { id: 'create', label: 'SOS', ml: 'SOS', icon: 'alert-circle-outline' },
+    { id: 'requests', label: 'Requests', ml: 'അഭ്യർത്ഥനകൾ', icon: 'list-outline' },
+    { id: 'safety', label: 'Safety', ml: 'സുരക്ഷ', icon: 'shield-checkmark-outline' },
+    { id: 'assistant', label: 'Help', ml: 'സഹായം', icon: 'chatbubbles-outline' },
+  ],
+  volunteer: [
+    { id: 'home', label: 'Home', ml: 'ഹോം', icon: 'home-outline' },
+    { id: 'create', label: 'Collect', ml: 'ശേഖരിക്കുക', icon: 'add-circle-outline' },
+    { id: 'relay', label: 'Relay', ml: 'കൈമാറ്റം', icon: 'qr-code-outline' },
+    { id: 'requests', label: 'Requests', ml: 'അഭ്യർത്ഥനകൾ', icon: 'list-outline' },
+    { id: 'assistant', label: 'Help', ml: 'സഹായം', icon: 'chatbubbles-outline' },
+  ],
+  coordinator: [
+    { id: 'home', label: 'Overview', ml: 'അവലോകനം', icon: 'speedometer-outline' },
+    { id: 'incidents', label: 'Incidents', ml: 'സംഭവങ്ങൾ', icon: 'list-outline' },
+    { id: 'map', label: 'Map', ml: 'ഭൂപടം', icon: 'map-outline' },
+    { id: 'teams', label: 'Teams', ml: 'സംഘങ്ങൾ', icon: 'people-outline' },
+    { id: 'more', label: 'More', ml: 'കൂടുതൽ', icon: 'menu-outline' },
+  ],
+  responder: [
+    { id: 'home', label: 'Missions', ml: 'ദൗത്യങ്ങൾ', icon: 'navigate-outline' },
+    { id: 'map', label: 'Map', ml: 'ഭൂപടം', icon: 'map-outline' },
+    { id: 'updates', label: 'Updates', ml: 'അപ്ഡേറ്റുകൾ', icon: 'notifications-outline' },
+    { id: 'resources', label: 'Resources', ml: 'വിഭവങ്ങൾ', icon: 'cube-outline' },
+  ],
+  relief: [
+    { id: 'home', label: 'Requests', ml: 'അഭ്യർത്ഥനകൾ', icon: 'mail-outline' },
+    { id: 'inventory', label: 'Inventory', ml: 'സ്റ്റോക്ക്', icon: 'layers-outline' },
+    { id: 'dispatch', label: 'Dispatch', ml: 'വിതരണം', icon: 'car-outline' },
+    { id: 'shelters', label: 'Shelters', ml: 'ക്യാമ്പുകൾ', icon: 'home-outline' },
+  ],
+};
 
 export const roleInfo: Record<Role, { title: string; ml: string; description: string; descriptionMl: string; workspace: string; workspaceMl: string; icon: IconName }> = {
   citizen: { title: 'Victim / Citizen', ml: 'ദുരിതബാധിതർ / പൗരൻ', description: 'Send an SOS fast. Track help.', descriptionMl: 'വേഗത്തിൽ SOS അയയ്ക്കുക. സഹായം ട്രാക്ക് ചെയ്യുക.', workspace: 'Your safety, connected.', workspaceMl: 'നിങ്ങളുടെ സുരക്ഷയ്ക്ക് ഒരു ബന്ധം.', icon: 'person-outline' },

@@ -35,6 +35,14 @@ export function ReportDetail({ report, role, language, queue, config, onClose, o
     catch (e) { setError(e instanceof Error ? e.message : 'Could not escalate'); }
     finally { setEscalating(false); }
   }
+  /** Hands an unfinished mission back to the command centre; needs a connection so the team is freed at once. */
+  async function release() {
+    if (!report) return;
+    setBusy(true); setError(''); setMessage('');
+    try { await service.act(role, api => api.releaseTeam(report.id)); await onRefresh(); setMessage('Team released. The incident is back in the queue for a new assignment.'); if (role === 'responder') onClose(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Could not release the team'); }
+    finally { setBusy(false); }
+  }
   function reloadReview() {
     if (!report) return;
     setVerification(report.verification); setUrgency(report.urgency || 'medium'); setReasons(report.urgency_reasons.join('\n')); setResponderId(report.assigned_to || ''); setReviewVersion(report.version); setError('');
@@ -102,6 +110,7 @@ export function ReportDetail({ report, role, language, queue, config, onClose, o
             <Button title={word(language, pendingReview ? 'Review waiting for sync' : 'Save review to outbox', pendingReview ? 'പരിശോധന സിങ്ക് കാത്തിരിക്കുന്നു' : 'പരിശോധന സേവ് ചെയ്യുക')} icon="checkmark-done-outline" disabled={seed || r.delivery_state === 'pending' || pendingReview || reviewChanged || hasBlockedChange} loading={busy} onPress={() => void review()} />
           </View>
           {!seed ? <TeamPanel report={r} disabled={busy || seed || pendingAssign || pendingReview || reviewChanged || hasBlockedChange || r.delivery_state === 'pending'} onAssign={teamId => enqueue('report.assign', { team_id: teamId, expected_version: r.version })} /> : null}
+          {!seed && r.assigned_to && r.mission_status !== 'completed' ? <Button title={`Release ${r.team?.name.split(' · ')[0] || 'team'} from this incident`} icon="exit-outline" tone="quiet" disabled={busy || localQueue.length > 0} onPress={() => void release()} /> : null}
           {!seed ? <DuplicatePanel report={r} disabled={busy || hasBlockedChange} onLink={target => enqueue('report.link_duplicate', { duplicate_of: target })} /> : null}
           {!seed ? <ReliefRequestPanel report={r} disabled={busy || hasBlockedChange || r.delivery_state === 'pending'} onRequest={items => enqueue('relief.request', { items, note: 'Allocated by government official' })} /> : null}
         </> : null}
@@ -112,6 +121,8 @@ export function ReportDetail({ report, role, language, queue, config, onClose, o
             <Button title="Request medical support" icon="medkit-outline" tone="secondary" disabled={seed || busy || hasBlockedChange} onPress={() => void enqueue('mission.request', { kind: 'medical', note: 'Medical team / ambulance needed on site' })} />
             <Button title={`Request supplies: medicine + food for ${r.priority?.people.affected ?? r.affected_count}`} icon="cube-outline" tone="secondary" disabled={seed || busy || hasBlockedChange} onPress={() => void enqueue('mission.request', { kind: 'supplies', items: { medicine_kits: Math.max(2, (r.priority?.people.injured ?? 0) * 2), food_packets: (r.priority?.people.affected ?? r.affected_count) * 3 }, note: 'Requested by rescue team on site' })} />
             <Text style={ui.small}>Requests are queued offline and reach the command centre and Food & Relief on sync.</Text>
+            <Button title="Release team (hand back to command)" icon="exit-outline" tone="quiet" disabled={seed || busy || localQueue.length > 0} onPress={() => void release()} />
+            <Text style={ui.small}>Use only if your team cannot complete this mission. Needs a connection; sync queued updates first.</Text>
           </View> : null}
           <View style={ui.card}><Text style={ui.h3}>{word(language, 'Add a field note', 'ഫീൽഡ് നോട്ട് നൽകുക')}</Text><Field label={word(language, 'Your observation', 'നിങ്ങളുടെ നിരീക്ഷണം')} value={note} onChangeText={setNote} multiline maxLength={1000} placeholder={word(language, 'Access route, needs, or progress...', 'വഴി, ആവശ്യം, പുരോഗതി...')} /><Button title={word(language, 'Save note offline', 'നോട്ട് ഓഫ്‌ലൈനായി സേവ് ചെയ്യുക')} icon="create-outline" disabled={seed || !note.trim() || hasBlockedChange} loading={busy} onPress={() => { void (async () => { if (await enqueue('mission.note', { id: Crypto.randomUUID(), text: note.trim(), created_at: new Date().toISOString() })) setNote(''); })(); }} /></View>
         </> : null}

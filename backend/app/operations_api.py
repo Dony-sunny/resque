@@ -1,12 +1,13 @@
-"""HTTP routes for teams, relief, inventory, shelters, KPIs, audit and demo controls."""
+"""HTTP routes for teams, relief, inventory, shelters, KPIs, audit, the assistant and demo controls."""
+import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
-from . import demo, ops
+from . import assistant, demo, ops
 from .auth import current_user
-from .models import AuditLog, IncidentDetail, InventoryItem, ReliefRequest, Report, RescueTeam, Shelter, now
-from .service import serialize_report, visible
+from .models import Assignment, AuditLog, IncidentDetail, InventoryItem, MissionAssignment, ReliefRequest, Report, RescueTeam, Shelter, now
+from .service import audit, serialize_report, visible
 
 router = APIRouter(prefix="/v1")
 
@@ -25,6 +26,11 @@ class Occupancy(Strict):
 
 class Restock(Strict):
     quantity: int = Field(gt=0, le=100000, strict=True)
+
+
+class Question(Strict):
+    message: str = Field(min_length=1, max_length=500)
+    report_id: str | None = Field(default=None, max_length=36)
 
 
 def engine_of(request: Request):
@@ -189,6 +195,43 @@ def escalate(report_id: str, request: Request, user=Depends(current_user)):
         ops.log(db, user["id"], "incident.escalated", "incident", report_id, report_id, None, None, ", ".join(f"{k} {v}" for k, v in shortfall.items()) or "no shortfall")
         db.flush()
         return serialize_report(db, report)
+
+
+@router.post("/incidents/{report_id}/release")
+def release_team(report_id: str, request: Request, user=Depends(current_user)):
+    """Hands an unfinished mission back to the command centre so another team can be assigned."""
+    need(user, "coordinator", "responder")
+    with Session(engine_of(request)) as db, db.begin():
+        report = db.get(Report, report_id)
+        if report is None or not visible(db, report, user):
+            raise HTTPException(404, "Report not found")
+        if not report.assigned_to:
+            raise HTTPException(409, "No team is assigned to this incident")
+        if report.mission_status == "completed":
+            raise HTTPException(409, "A resolved mission cannot be released")
+        team = ops.team_for_report(db, report)
+        db.execute(update(Assignment).where(Assignment.report_id == report.id, Assignment.active.is_(True)).values(active=False))
+        db.execute(update(MissionAssignment).where(MissionAssignment.report_id == report.id, MissionAssignment.active.is_(True)).values(active=False))
+        previous = report.mission_status
+        report.assigned_to, report.mission_status = None, "unassigned"
+        report.version += 1
+        report.updated_at = now()
+        name = team["name"] if team else "responder"
+        audit(db, report, user, "mission.released", f"{name} released by {user['role']}")
+        ops.log(db, user["id"], "mission.released", "incident", report.id, report.id, previous, "unassigned", name)
+        db.flush()
+        return serialize_report(db, report)
+
+
+@router.post("/assistant")
+def ask_assistant(body: Question, request: Request, user=Depends(current_user)):
+    with Session(engine_of(request)) as db:
+        return assistant.answer(db, user, body.message.strip(), body.report_id, request.app.state.settings.ai_model)
+
+
+@router.get("/assistant/status")
+def assistant_status(user=Depends(current_user)):
+    return {"ai": bool(os.getenv("ANTHROPIC_API_KEY")), "mode": "ai" if os.getenv("ANTHROPIC_API_KEY") else "guide"}
 
 
 @router.get("/audit")

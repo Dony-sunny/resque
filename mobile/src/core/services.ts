@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { ApiClient, normalizeApiUrl } from './api';
+import { localAnswer, type AssistantReply } from './assistant';
 import { LocalStore, demoUser } from './store';
 import { SyncEngine } from './sync';
 import type { AlertInput, AuthorityAlert, BackendHealth, Config, ConnectionStatus, EventKind, LocationFix, ReportDraft, Role, SyncSummary } from './types';
@@ -178,6 +179,15 @@ export async function act<T>(role: Role, run: (api: ApiClient) => Promise<T>): P
   const config = await loadConfig();
   if (config.forceOffline) throw new Error('Turn off offline practice. This action needs a server connection.');
   return run(new ApiClient(config.apiUrl, role, config.demoAccessKey || ''));
+}
+/** Asks the server assistant (role-scoped data, AI when configured); offline or on error, answers from the on-phone guide. */
+export async function askAssistant(role: Role, message: string, reportId?: string): Promise<AssistantReply> {
+  const config = await loadConfig();
+  if (!config.forceOffline) {
+    try { return await new ApiClient(config.apiUrl, role, config.demoAccessKey || '').ask(message, reportId); }
+    catch { /* fall through to the offline guide */ }
+  }
+  return { ...localAnswer(message, role, await loadReports(role)), note: config.forceOffline ? 'Offline practice is on.' : 'Server unreachable.' };
 }
 export async function saveKitChecklist(items: number[]) { await (await settings()).setMetadata('kit-checklist', items); }
 export async function loadKitChecklist(): Promise<number[]> { return await (await settings()).metadata<number[]>('kit-checklist') || []; }
