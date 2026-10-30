@@ -28,7 +28,7 @@ export function Chip({ label, active, onPress, icon }: { label: string; active?:
   </Pressable>;
 }
 export function Badge({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'success' | 'warning' | 'danger' }) {
-  const styles = { neutral: [colors.blueLight, colors.navy], success: [colors.tealLight, colors.teal], warning: [colors.amberLight, colors.amber], danger: [colors.redLight, colors.red] }[tone];
+  const styles = { neutral: [colors.blueLight, colors.navy], success: [colors.greenLight, colors.greenDark], warning: [colors.amberLight, colors.amber], danger: [colors.redLight, colors.red] }[tone];
   return <View style={{ borderRadius: 7, paddingVertical: 5, paddingHorizontal: 8, backgroundColor: styles[0], alignSelf: 'flex-start' }}><Text style={{ fontSize: 11, fontWeight: '800', color: styles[1], letterSpacing: 0.2 }}>{label}</Text></View>;
 }
 export function Field({ label, hint, ...props }: TextInputProps & { label: string; hint?: string }) {

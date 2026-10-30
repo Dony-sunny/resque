@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ResQ Control Room</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root { --bg:#0E1F26; --panel:#152C35; --line:#24434E; --text:#E8F1EF; --muted:#9DB4B9; --teal:#22A699; --red:#E5484D; --orange:#F28C28; --amber:#E8B931; --blue:#5B9BD5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 18px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+  header h1 { margin:0; font-size:18px; letter-spacing:-.3px; }
+  header .sub { color:var(--muted); font-size:12px; letter-spacing:1.5px; }
+  .stats { display:flex; gap:10px; margin-left:auto; flex-wrap:wrap; }
+  .stat { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:4px 12px; text-align:center; min-width:84px; }
+  .stat b { display:block; font-size:20px; }
+  .stat span { color:var(--muted); font-size:11px; }
+  main { flex:1; display:grid; grid-template-columns: 1fr 400px; min-height:0; }
+  #map { height:100%; }
+  aside { border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; background:var(--panel); }
+  .tabs { display:flex; border-bottom:1px solid var(--line); }
+  .tabs button { flex:1; background:none; border:0; color:var(--muted); padding:11px; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; }
+  .tabs button.on { color:var(--text); border-bottom-color:var(--teal); }
+  .pane { overflow:auto; flex:1; padding:12px; display:none; }
+  .pane.on { display:block; }
+  .card { background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:11px 12px; margin-bottom:9px; cursor:pointer; }
+  .card.new { border-color:var(--red); box-shadow:0 0 0 2px rgba(229,72,77,.35); }
+  .card h3 { margin:0 0 3px; font-size:15px; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .muted { color:var(--muted); font-size:12px; }
+  .badge { font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:6px; background:#24434E; letter-spacing:.3px; text-transform:uppercase; }
+  .b-critical { background:var(--red); } .b-high { background:var(--orange); } .b-medium { background:var(--amber); color:#222; } .b-low { background:var(--blue); }
+  .b-verified { background:#1C6E5F; } .b-rejected { background:#5a2a2e; }
+  .filters { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  .filters button, .btn { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:600; }
+  .filters button.on { border-color:var(--teal); color:var(--teal); }
+  .btn.primary { background:var(--teal); border-color:var(--teal); color:#fff; }
+  .btn.danger { background:var(--red); border-color:var(--red); color:#fff; }
+  label { display:block; font-weight:700; margin:9px 0 4px; font-size:12.5px; }
+  input, textarea, select { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit; }
+  textarea { min-height:80px; resize:vertical; }
+  .alert-danger { border-left:4px solid var(--red); } .alert-warning { border-left:4px solid var(--amber); } .alert-info { border-left:4px solid var(--blue); }
+  #login { position:fixed; inset:0; background:rgba(8,18,22,.92); display:flex; align-items:center; justify-content:center; z-index:2000; }
+  #login .box { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px; width:min(380px,92vw); }
+  #toast { position:fixed; left:50%; top:70px; transform:translateX(-50%); background:var(--red); color:#fff; padding:10px 18px; border-radius:10px; font-weight:800; display:none; z-index:1500; box-shadow:0 6px 24px rgba(0,0,0,.4); }
+  .live { width:9px; height:9px; border-radius:50%; background:var(--teal); display:inline-block; margin-right:6px; }
+  .live.off { background:var(--red); }
+  .leaflet-popup-content { font-size:13px; }
+  @media (max-width: 860px) { main { grid-template-columns:1fr; grid-template-rows: 45vh 1fr; } aside { border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>ResQ Control Room</h1><div class="sub">LIVE COORDINATOR DASHBOARD</div></div>
+  <div class="muted"><span id="live" class="live off"></span><span id="status">Connecting...</span></div>
+  <div class="stats">
+    <div class="stat"><b id="s-total">0</b><span>Incidents</span></div>
+    <div class="stat"><b id="s-unverified" style="color:var(--amber)">0</b><span>Unverified</span></div>
+    <div class="stat"><b id="s-critical" style="color:var(--red)">0</b><span>Critical/high</span></div>
+    <div class="stat"><b id="s-active" style="color:var(--teal)">0</b><span>Missions active</span></div>
+    <div class="stat"><b id="s-people">0</b><span>People affected</span></div>
+  </div>
+  <button class="btn" id="sound">🔔 Siren on</button>
+</header>
+<main>
+  <div id="map"></div>
+  <aside>
+    <div class="tabs"><button class="on" data-pane="incidents">Incidents</button><button data-pane="alerts">Alerts</button></div>
+    <div class="pane on" id="incidents">
+      <div class="filters" id="filters">
+        <button class="on" data-f="all">All</button><button data-f="unverified">Unverified</button><button data-f="urgent">Critical/high</button><button data-f="mission">In mission</button><button data-f="sms">Via SMS</button>
+      </div>
+      <div id="list"></div>
+    </div>
+    <div class="pane" id="alerts">
+      <div class="card" style="cursor:default">
+        <h3>Broadcast an alert</h3>
+        <div class="muted">Every app receives it on its next sync. It is also carried on QR relays' devices once synced.</div>
+        <label for="a-title">Title</label><input id="a-title" maxlength="120" placeholder="Evacuate low-lying areas of Ward 5">
+        <label for="a-body">Message</label><textarea id="a-body" maxlength="1000" placeholder="Move to GHSS Aluva relief camp. Boats are operating from the market junction."></textarea>
+        <div class="row" style="gap:10px">
+          <div style="flex:1"><label for="a-sev">Severity</label><select id="a-sev"><option value="danger">Danger</option><option value="warning" selected>Warning</option><option value="info">Info</option></select></div>
+          <div style="flex:1"><label for="a-hours">Valid for (hours)</label><input id="a-hours" type="number" min="1" max="168" value="24"></div>
+        </div>
+        <label for="a-area">Area</label><input id="a-area" maxlength="160" placeholder="Aluva municipality, Wards 3–7">
+        <div style="margin-top:12px" class="row"><button class="btn danger" id="a-send">Publish alert</button><span class="muted" id="a-msg"></span></div>
+      </div>
+      <div id="alert-list"></div>
+    </div>
+  </aside>
+</main>
+<div id="toast"></div>
+<div id="login">
+  <div class="box">
+    <h2 style="margin-top:0">ResQ Control Room</h2>
+    <p class="muted">Signs in as the demo rescue coordinator. Enter the demo access key only if the server requires one.</p>
+    <label for="key">Demo access key (optional)</label><input id="key" type="password" autocomplete="off">
+    <div style="margin-top:14px"><button class="btn primary" id="go">Open dashboard</button></div>
+    <p class="muted" id="login-msg"></p>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let token = null, reports = [], alerts = [], seen = null, filter = 'all', sound = true, markers = new Map(), fresh = new Set();
+const map = L.map('map', { zoomControl: true }).setView([10.0, 76.3], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+let fitted = false;
+
+const color = r => r.verification === 'rejected' ? '#6b7b80' : ({ critical:'#E5484D', high:'#F28C28', medium:'#E8B931', low:'#5B9BD5' })[r.urgency] || '#B9C7CB';
+const kinds = { flood:'Flood / water', medical:'Medical help', fire:'Fire', trapped:'Trapped / rescue', supplies:'Food / supplies', other:'Other' };
+const viaSms = r => r.audit.some(a => a.action === 'sms.received');
+const ago = iso => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m/60)} h ago`; };
+
+async function api(path, options = {}) {
+  const res = await fetch('/v1' + path, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(options.headers || {}) } });
+  if (res.status === 401 && token) { token = null; sessionStorage.removeItem('resq-token'); $('login').style.display = 'flex'; throw new Error('Session expired'); }
+  if (!res.ok) { let d = ''; try { d = (await res.json()).detail; } catch {} throw new Error(typeof d === 'string' ? d : res.status + ' error'); }
+  return res.json();
+}
+async function login() {
+  $('login-msg').textContent = 'Signing in...';
+  try {
+    const key = $('key').value.trim();
+    const auth = await api('/auth/demo', { method: 'POST', body: JSON.stringify({ role: 'coordinator' }), headers: key ? { 'X-Demo-Key': key } : {} });
+    token = auth.access_token; try { sessionStorage.setItem('resq-token', token); } catch {}
+    $('login').style.display = 'none'; poll();
+  } catch (e) { $('login-msg').textContent = e.message; }
+}
+$('go').onclick = login;
+$('key').onkeydown = e => { if (e.key === 'Enter') login(); };
+
+function siren() {
+  if (!sound) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'sawtooth'; osc.connect(gain); gain.connect(ctx.destination); gain.gain.value = 0.08;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 4; i++) { osc.frequency.setValueAtTime(700, t + i * 0.5); osc.frequency.linearRampToValueAtTime(1150, t + i * 0.5 + 0.25); osc.frequency.linearRampToValueAtTime(700, t + i * 0.5 + 0.5); }
+    osc.start(); osc.stop(t + 2);
+  } catch {}
+}
+function toast(text) { const t = $('toast'); t.textContent = text; t.style.display = 'block'; clearTimeout(toast.timer); toast.timer = setTimeout(() => t.style.display = 'none', 6000); }
+$('sound').onclick = () => { sound = !sound; $('sound').textContent = sound ? '🔔 Siren on' : '🔕 Siren off'; if (sound) siren(); };
+
+function popup(r) {
+  const notes = r.notes.slice(-2).map(n => `<div class="muted">📝 ${esc(n.text)}</div>`).join('');
+  return `<b>${esc(kinds[r.incident_type] || r.incident_type)}</b> · ${r.affected_count} people<br>${esc(r.description)}<br><span class="muted">📍 ${esc(r.location.label)}</span><br>
+    <span class="muted">${esc(r.verification)} · urgency ${esc(r.urgency || 'not reviewed')} · mission ${esc(r.mission_status.replace('_',' '))}${r.assigned_to ? ' (' + esc(r.assigned_to) + ')' : ''}</span>${notes}
+    <div class="muted">ID ${r.id.slice(0,8)} · ${ago(r.created_at)}${viaSms(r) ? ' · via SMS' : ''}</div>`;
+}
+function render() {
+  const urgent = r => r.urgency === 'critical' || r.urgency === 'high';
+  const active = r => ['assigned','accepted','en_route','on_scene'].includes(r.mission_status);
+  $('s-total').textContent = reports.length;
+  $('s-unverified').textContent = reports.filter(r => r.verification === 'unverified').length;
+  $('s-critical').textContent = reports.filter(urgent).length;
+  $('s-active').textContent = reports.filter(active).length;
+  $('s-people').textContent = reports.reduce((n, r) => n + r.affected_count, 0);
+  const shown = reports.filter(r => filter === 'all' || (filter === 'unverified' ? r.verification === 'unverified' : filter === 'urgent' ? urgent(r) : filter === 'mission' ? active(r) : viaSms(r)));
+  const rank = r => fresh.has(r.id) ? 0 : r.verification === 'unverified' ? 1 : urgent(r) ? 2 : 3;
+  shown.sort((a, b) => rank(a) - rank(b) || b.updated_at.localeCompare(a.updated_at));
+  $('list').innerHTML = shown.length ? shown.map(r => `<div class="card ${fresh.has(r.id) ? 'new' : ''}" data-id="${r.id}">
+      <div class="row" style="justify-content:space-between"><h3>${esc(kinds[r.incident_type] || r.incident_type)} · ${r.affected_count} people</h3><span class="muted">${ago(r.created_at)}</span></div>
+      <div class="muted">📍 ${esc(r.location.label)}${r.location.latitude === null ? ' · no coordinates' : ''}</div>
+      <div style="margin:5px 0">${esc(r.description)}</div>
+      <div class="row">${fresh.has(r.id) ? '<span class="badge b-critical">NEW</span>' : ''}<span class="badge b-${r.verification}">${r.verification}</span>${r.urgency ? `<span class="badge b-${r.urgency}">${r.urgency}</span>` : ''}<span class="badge">${r.mission_status.replace('_',' ')}</span>${viaSms(r) ? '<span class="badge">SMS</span>' : ''}${r.delivery_state === 'acknowledged' ? '<span class="badge b-verified">ack</span>' : ''}</div>
+    </div>`).join('') : '<p class="muted">No incidents match this filter.</p>';
+  const ids = new Set();
+  for (const r of reports) {
+    if (r.location.latitude === null) continue;
+    ids.add(r.id);
+    const style = { radius: urgent(r) ? 11 : 8, color: fresh.has(r.id) ? '#fff' : '#0E1F26', weight: 2, fillColor: color(r), fillOpacity: .95 };
+    if (markers.has(r.id)) markers.get(r.id).setStyle(style).setPopupContent(popup(r));
+    else markers.set(r.id, L.circleMarker([r.location.latitude, r.location.longitude], style).bindPopup(popup(r)).addTo(map));
+  }
+  for (const [id, m] of markers) if (!ids.has(id)) { map.removeLayer(m); markers.delete(id); }
+  if (!fitted && markers.size) { map.fitBounds(L.featureGroup([...markers.values()]).getBounds().pad(0.3)); fitted = true; }
+  $('alert-list').innerHTML = alerts.length ? alerts.map(a => `<div class="card alert-${a.severity}" style="cursor:default"><div class="row" style="justify-content:space-between"><h3>${esc(a.title)}</h3><span class="badge">${esc(a.severity)}</span></div><div>${esc(a.body)}</div><div class="muted">📍 ${esc(a.area)} · ${ago(a.created_at)} · expires ${new Date(a.expires_at).toLocaleString()}</div></div>`).join('') : '<p class="muted">No active alerts.</p>';
+}
+$('list').onclick = e => { const card = e.target.closest('.card'); if (!card) return; const m = markers.get(card.dataset.id); fresh.delete(card.dataset.id); if (m) { map.setView(m.getLatLng(), 14); m.openPopup(); } render(); };
+$('filters').onclick = e => { if (!e.target.dataset.f) return; filter = e.target.dataset.f; [...$('filters').children].forEach(b => b.classList.toggle('on', b === e.target)); render(); };
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === b.dataset.pane)); });
+
+$('a-send').onclick = async () => {
+  $('a-msg').textContent = 'Publishing...';
+  try {
+    await api('/alerts', { method: 'POST', body: JSON.stringify({ title: $('a-title').value.trim(), body: $('a-body').value.trim(), severity: $('a-sev').value, area: $('a-area').value.trim(), hours: Number($('a-hours').value) || 24 }) });
+    $('a-msg').textContent = 'Published. Phones receive it on their next sync.'; $('a-title').value = ''; $('a-body').value = '';
+    alerts = await api('/alerts'); render();
+  } catch (e) { $('a-msg').textContent = e.message; }
+};
+
+async function poll() {
+  if (!token) return;
+  try {
+    const [next, nextAlerts] = await Promise.all([api('/reports'), api('/alerts')]);
+    const ids = new Set(next.map(r => r.id));
+    if (seen) {
+      const added = next.filter(r => !seen.has(r.id));
+      added.forEach(r => fresh.add(r.id));
+      if (added.length) { siren(); toast(`🚨 ${added.length} new SOS: ${added.map(r => kinds[r.incident_type] || r.incident_type).join(', ')}`); }
+    }
+    seen = ids; reports = next; alerts = nextAlerts;
+    $('live').className = 'live'; $('status').textContent = 'Live · updated ' + new Date().toLocaleTimeString();
+    render();
+  } catch (e) { $('live').className = 'live off'; $('status').textContent = 'Connection lost: ' + e.message; }
+  clearTimeout(poll.timer); poll.timer = setTimeout(poll, 5000);
+}
+try { token = sessionStorage.getItem('resq-token'); } catch {}
+if (token) { $('login').style.display = 'none'; poll(); }
+</script>
+</body>
+</html>

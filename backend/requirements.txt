@@ -5,3 +5,5 @@ pydantic==2.13.5
 psycopg[binary]>=3.2,<4
 pytest==9.1.1
 httpx==0.28.1
+# Optional: RESQ Assistant uses Claude only when ANTHROPIC_API_KEY is set.
+anthropic==2.3.0

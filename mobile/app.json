@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ResQ Relay",
+    "name": "RESQ",
     "slug": "resq-relay",
     "version": "0.2.0",
     "orientation": "portrait",
@@ -21,7 +21,11 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "plugins": [
       "./plugins/with-resq-android.cjs",
@@ -40,10 +44,27 @@
           "locationWhenInUsePermission": "Attach your current location to an SOS report."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ]
     ],
     "extra": {
       "environment": "hackathon-demo"
+    },
+    "icon": "./assets/icon.png",
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "RESQ",
+      "shortName": "RESQ",
+      "themeColor": "#09182B",
+      "backgroundColor": "#FFFFFF"
     }
   }
 }

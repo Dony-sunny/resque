@@ -1,9 +1,9 @@
 export type Language = 'en' | 'ml';
 export function word(language: Language, english: string, malayalam: string) { return language === 'ml' ? malayalam : english; }
 export const incidentNames = {
-  flood: ['Flood / water', 'വെള്ളപ്പൊക്കം'], medical: ['Medical help', 'വൈദ്യസഹായം'],
-  fire: ['Fire', 'തീപിടിത്തം'], trapped: ['Trapped / rescue', 'കുടുങ്ങി'],
-  supplies: ['Food / supplies', 'ഭക്ഷണം / സാധനങ്ങൾ'], other: ['Other', 'മറ്റുള്ളവ'],
+  flood: ['Flood', 'വെള്ളപ്പൊക്കം'], landslide: ['Landslide', 'ഉരുൾപൊട്ടൽ'], fire: ['Fire', 'തീപിടിത്തം'],
+  earthquake: ['Earthquake', 'ഭൂകമ്പം'], cyclone: ['Cyclone', 'ചുഴലിക്കാറ്റ്'], medical: ['Medical emergency', 'വൈദ്യ അടിയന്തരം'],
+  trapped: ['Trapped / rescue', 'കുടുങ്ങി'], supplies: ['Food / supplies', 'ഭക്ഷണം / സാധനങ്ങൾ'], other: ['Other emergency', 'മറ്റ് അടിയന്തരം'],
 } as const;
 export function incidentName(type: string, language: Language) {
   const pair = incidentNames[type as keyof typeof incidentNames];
@@ -14,7 +14,7 @@ const statusNames: Record<string, string> = {
   delivered: 'സെർവറിൽ ലഭിച്ചു', acknowledged: 'ഏകോപകൻ സ്വീകരിച്ചു',
   unverified: 'സ്ഥിരീകരിച്ചിട്ടില്ല', verified: 'സ്ഥിരീകരിച്ചു', rejected: 'നിരസിച്ചു',
   low: 'കുറവ്', medium: 'മിതം', high: 'ഉയർന്നത്', critical: 'അതീവ അടിയന്തരം',
-  unassigned: 'നിയോഗിച്ചിട്ടില്ല', assigned: 'നിയോഗിച്ചു', accepted: 'സ്വീകരിച്ചു', en_route: 'യാത്രയിലാണ്', on_scene: 'സ്ഥലത്തെത്തി', completed: 'പൂർത്തിയായി',
+  unassigned: 'നിയോഗിച്ചിട്ടില്ല', assigned: 'നിയോഗിച്ചു', in_progress: 'രക്ഷാപ്രവർത്തനം നടക്കുന്നു', accepted: 'സ്വീകരിച്ചു', en_route: 'യാത്രയിലാണ്', on_scene: 'സ്ഥലത്തെത്തി', completed: 'പൂർത്തിയായി',
   'report.create': 'SOS അയയ്ക്കുക', 'report.review': 'റിപ്പോർട്ട് പരിശോധിക്കുക', 'report.assign': 'രക്ഷാപ്രവർത്തകനെ നിയോഗിക്കുക',
   'mission.status': 'ദൗത്യസ്ഥിതി മാറ്റം', 'mission.note': 'ഫീൽഡ് നോട്ട്',
   'report.received': 'സെർവറിൽ റിപ്പോർട്ട് ലഭിച്ചു', 'report.reviewed': 'റിപ്പോർട്ട് പരിശോധിച്ചു',

@@ -2,7 +2,7 @@ import type { Report, ReportDraft, ReportInput } from './types';
 
 export const MAX_RELAY_BYTES = 1900;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const kinds = new Set(['flood', 'medical', 'fire', 'trapped', 'supplies', 'other']);
+const kinds = new Set(['flood', 'landslide', 'fire', 'earthquake', 'cyclone', 'medical', 'trapped', 'supplies', 'other']);
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Expected an object.');
   return value as Record<string, unknown>;
@@ -35,9 +35,16 @@ export function utf8Bytes(value: string): number {
   // TextEncoder is not available on every React Native runtime.
   return unescape(encodeURIComponent(value)).length;
 }
+/** FNV-1a 32-bit checksum of the report JSON. It detects accidental corruption only; it does not prove who made the report. */
+export function relayChecksum(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
 export function exportRelay(report: Report): string {
   if (report.source === 'seed') throw new Error('Synthetic examples cannot be relayed. Create a real demo report first.');
-  const value = JSON.stringify({ format: 'resq-relay', version: 1, report: validateReportInput(immutableInput(report)) });
+  const body = validateReportInput(immutableInput(report));
+  const value = JSON.stringify({ format: 'resq-relay', version: 1, check: relayChecksum(JSON.stringify(body)), report: body });
   if (utf8Bytes(value) > MAX_RELAY_BYTES) throw new Error('Report is too large for one QR. Shorten the description before creating a new report.');
   return value;
 }
@@ -47,5 +54,8 @@ export function parseRelay(value: string): ReportInput {
   try { data = record(JSON.parse(value)); } catch { throw new Error('This is not a valid ResQ Relay QR.'); }
   if (data.format !== 'resq-relay' || data.version !== 1) throw new Error('Unsupported QR format or version.');
   // Whitelist input fields: QR cannot import a delivery state, role, review, token, or assignment.
-  return validateReportInput(data.report);
+  const report = validateReportInput(data.report);
+  // Older v1 codes carry no checksum; when one is present it must match the whitelisted report fields.
+  if (data.check !== undefined && data.check !== relayChecksum(JSON.stringify(report))) throw new Error('This QR looks damaged or altered. Ask for the code to be shown again.');
+  return report;
 }

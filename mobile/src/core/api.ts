@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
-import type { BackendHealth, Role, ServerReport, SyncEvent, SyncResponse, Transport, User } from './types';
+import type { AssistantReply } from './assistant';
+import type { AlertInput, AuditRow, AuthorityAlert, BackendHealth, FacilityView, ImpactData, ReliefDemandData, InventoryView, OpsSummary, ReliefRequestView, Role, ServerReport, ShelterView, SyncEvent, SyncResponse, TeamView, Transport, User } from './types';
 
 export function normalizeApiUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '');
@@ -64,5 +65,27 @@ export class ApiClient implements Transport {
   reports(): Promise<ServerReport[]> { return this.authenticated('/reports'); }
   responders(): Promise<User[]> { return this.authenticated('/responders'); }
   me(): Promise<User> { return this.authenticated('/me'); }
+  alerts(): Promise<AuthorityAlert[]> { return this.authenticated('/alerts'); }
+  publishAlert(alert: AlertInput): Promise<AuthorityAlert> { return this.authenticated('/alerts', { method: 'POST', body: JSON.stringify(alert) }); }
+  private post<T>(path: string, body: unknown = {}): Promise<T> { return this.authenticated(path, { method: 'POST', body: JSON.stringify(body) }); }
+  summary(): Promise<OpsSummary> { return this.authenticated('/ops/summary'); }
+  teams(): Promise<TeamView[]> { return this.authenticated('/teams'); }
+  recommendTeams(reportId: string): Promise<TeamView[]> { return this.authenticated(`/incidents/${reportId}/teams`); }
+  setAvailability(teamId: string, onDuty: boolean): Promise<TeamView> { return this.post(`/teams/${teamId}/availability`, { on_duty: onDuty }); }
+  reliefRequests(): Promise<ReliefRequestView[]> { return this.authenticated('/relief/requests'); }
+  reliefAction(id: string, action: 'approve' | 'pack' | 'dispatch' | 'deliver' | 'cancel'): Promise<ReliefRequestView> { return this.post(`/relief/requests/${id}/${action}`); }
+  inventory(): Promise<InventoryView[]> { return this.authenticated('/inventory'); }
+  restock(key: string, quantity: number): Promise<InventoryView> { return this.post(`/inventory/${key}/restock`, { quantity }); }
+  shelters(): Promise<ShelterView[]> { return this.authenticated('/shelters'); }
+  setOccupancy(id: string, occupancy: number): Promise<ShelterView> { return this.post(`/shelters/${id}/occupancy`, { occupancy }); }
+  escalate(reportId: string): Promise<ServerReport> { return this.post(`/incidents/${reportId}/escalate`); }
+  auditLog(): Promise<AuditRow[]> { return this.authenticated('/audit'); }
+  facilities(): Promise<FacilityView[]> { return this.authenticated('/facilities'); }
+  impact(): Promise<ImpactData> { return this.authenticated('/map/impact'); }
+  reliefDemand(): Promise<ReliefDemandData> { return this.authenticated('/map/relief-demand'); }
+  releaseTeam(reportId: string): Promise<ServerReport> { return this.post(`/incidents/${reportId}/release`); }
+  ask(message: string, reportId?: string): Promise<AssistantReply> { return this.post('/assistant', reportId ? { message, report_id: reportId } : { message }); }
+  demoReset(): Promise<Record<string, number>> { return this.post('/demo/reset'); }
+  demoSimulate(): Promise<{ created: string[]; advanced: { team: string; status: string }[] }> { return this.post('/demo/simulate'); }
   health(): Promise<BackendHealth> { return this.request('/health'); }
 }

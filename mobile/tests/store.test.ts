@@ -46,6 +46,9 @@ describe('durable report and outbox storage', () => {
     expect(first.report.delivery_state).toBe('pending'); expect(first.report.urgency).toBeNull(); expect(first.report.receipt_token).toBeUndefined();
     expect(await f.store.queue('demo-volunteer')).toHaveLength(1);
     parsed.report.description = 'Changed report';
+    // With its checksum the edit is rejected as damaged; without one (older v1 codes) the store's identity check still refuses it.
+    await expect(f.store.importRelay(demoUser('volunteer'), JSON.stringify(parsed))).rejects.toThrow('damaged or altered');
+    delete parsed.check;
     await expect(f.store.importRelay(demoUser('volunteer'), JSON.stringify(parsed))).rejects.toThrow('different content');
     f.db.close();
   });
