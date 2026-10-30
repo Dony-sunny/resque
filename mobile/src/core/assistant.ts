@@ -33,7 +33,7 @@ export function actionsFor(intent: string, role: Role): AssistantAction[] {
   if (intent === 'urgent') return victim ? [{ label: 'Send SOS now', route: 'create' }, { label: 'Call 112', call: '112' }] : [{ label: 'Call 112', call: '112' }];
   if (intent === 'report' && victim) return [{ label: 'Open SOS form', route: 'create' }];
   if (intent === 'status' && victim) return [{ label: 'Open my requests', route: 'requests' }];
-  if (intent === 'shelter') return [{ label: 'Shelters on map', route: 'map' }];
+  if (intent === 'shelter') return [{ label: 'Open Safe Zones', route: 'safezones' }];
   if (intent === 'contacts') return [{ label: 'Call 112', call: '112' }];
   if (intent === 'safety' && victim) return [{ label: 'Safety guides', route: 'safety' }];
   return [];
@@ -64,6 +64,6 @@ export function localAnswer(question: string, role: Role, reports: Report[]): As
 }
 
 export const quickQuestions: Record<'victim' | 'staff', string[]> = {
-  victim: ['How do I report an emergency?', 'Flood safety', 'Find shelter', 'Track my SOS', 'Emergency contacts', 'Explain priority'],
-  staff: ['Explain priority', 'Current stock', 'My missions', 'Find shelter', 'Emergency contacts', 'First aid'],
+  victim: ['Flood safety', 'Find nearest shelter', 'Track my request', 'How to report an emergency', 'Emergency contacts', 'Explain my incident priority'],
+  staff: ['Explain priority', 'Current stock', 'My missions', 'Find nearest shelter', 'Emergency contacts', 'First aid'],
 };

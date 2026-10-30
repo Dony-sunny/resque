@@ -18,7 +18,7 @@ def test_guide_mode_without_api_key(ops_client, monkeypatch):
     contacts = ask(ops_client, "citizen", "emergency contact numbers")
     assert "112" in contacts["answer"] and "1077" in contacts["answer"]
     shelter = ask(ops_client, "citizen", "find shelter")
-    assert "simulated" in shelter["answer"].lower() and shelter["actions"] == [{"label": "Shelters on map", "route": "map"}]
+    assert "simulated" in shelter["answer"].lower() and shelter["actions"] == [{"label": "Open Safe Zones", "route": "safezones"}]
 
 
 def test_urgent_message_points_to_sos_and_112_and_never_calls_the_model(ops_client, monkeypatch):

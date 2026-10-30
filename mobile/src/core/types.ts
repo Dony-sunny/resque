@@ -34,6 +34,13 @@ export interface ReliefRequestView extends ReliefSummary { incident_id: string |
 export interface TeamView { id: string; name: string; capabilities: string[]; capacity: number; base: string; latitude: number; longitude: number; readiness: number; on_duty: boolean; lead_user_id: string; simulated: boolean; mission_id: string | null; mission_status: MissionStatus | null; available: boolean; distance_km?: number; match_score?: number; match_reason?: string }
 export interface InventoryView { key: string; name: string; unit: string; kind: 'supply' | 'asset'; total: number; reserved: number; available: number; low_threshold: number; low: boolean }
 export interface ShelterView { id: string; name: string; area: string; latitude: number; longitude: number; capacity: number; occupancy: number; remaining: number; facilities: string[]; status: 'open' | 'full' | 'closed'; simulated: boolean }
+export type FacilityCategory = 'shelter' | 'relief_camp' | 'hospital' | 'relief_center';
+/** A safe zone from /v1/facilities. Capacity fields are null when no live record supplies them. */
+export interface FacilityView {
+  id: string; name: string; category: FacilityCategory; latitude: number; longitude: number; address: string; locality: string; district: string; state: string;
+  capacity: number | null; occupancy: number | null; remaining: number | null; services: string[]; availability_status: 'open' | 'full' | 'closed' | 'unknown';
+  last_updated: string; phone: string | null; notes: string; is_simulated: boolean; verification_status: string;
+}
 export interface OpsSummary { active_sos: number; critical: number; unassigned: number; teams_available: number; teams_total: number; pending_relief: number; dispatches_active: number; open_shelters: number; shelter_space: number; people_affected: number; low_stock: InventoryView[]; shortages: { key: string; required: number; available: number; shortfall: number }[] }
 export interface AuditRow { id: string; actor: string; action: string; entity: string; entity_id: string; incident_id: string | null; previous_status: string | null; new_status: string | null; detail: string; created_at: string }
 export interface Report extends Omit<ServerReport, 'delivery_state'> {

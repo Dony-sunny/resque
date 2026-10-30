@@ -6,6 +6,7 @@ import * as service from './src/core/services';
 import { roleInfo, tabs, type Route } from './src/features/registry';
 import { HomeScreen, RequestsScreen } from './src/features/Reports';
 import { AssistantScreen } from './src/features/Assistant';
+import { SafeZonesScreen } from './src/features/SafeZones';
 import { CreateReportScreen } from './src/features/CreateReport';
 import { RelayScreen } from './src/features/Relay';
 import { OutboxScreen } from './src/features/Outbox';
@@ -141,7 +142,11 @@ function RelayApp() {
     <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={({ pressed }) => ({ width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.navySoft, opacity: pressed || disabled ? 0.5 : 1 })}>
       {busy ? <ActivityIndicator color="#FFFFFF" /> : <Icon name={icon} size={22} color="#FFFFFF" />}
     </Pressable>;
-  const moreLinks: [Route, string, React.ComponentProps<typeof Icon>['name']][] = [['shelters', 'Shelters & camps', 'home-outline'], ['audit', 'Audit log', 'document-text-outline'], ['queue', `Outbox (${queue.length} queued)`, 'swap-vertical-outline'], ['assistant', 'RESQ Assistant', 'chatbubbles-outline']];
+  const moreLinks: [Route, string, React.ComponentProps<typeof Icon>['name']][] = victim
+    ? [['safety', word(language, 'Emergency guides, contacts & preparedness', 'സുരക്ഷാ നിർദേശങ്ങൾ, നമ്പറുകൾ'), 'shield-checkmark-outline'], ['notifications', word(language, 'Official alerts', 'ഔദ്യോഗിക മുന്നറിയിപ്പുകൾ'), 'notifications-outline'],
+      ['relay', word(language, 'QR relay (no network)', 'QR കൈമാറ്റം'), 'qr-code-outline'], ['map', word(language, 'Incident map', 'സംഭവ മാപ്പ്'), 'map-outline'], ['queue', `${word(language, 'Outbox', 'ഔട്ട്ബോക്സ്')} (${queue.length})`, 'swap-vertical-outline']]
+    : [['safezones', 'Safe Zones map', 'navigate-outline'], ['shelters', 'Shelters & camps', 'home-outline'], ['audit', 'Audit log', 'document-text-outline'], ['queue', `Outbox (${queue.length} queued)`, 'swap-vertical-outline']];
+  const unread = dismissed ? alerts.filter(a => !dismissed.has(a.id)).length : 0;
 
   return <SafeAreaView style={[ui.page, { backgroundColor: colors.navy }]} edges={['top']}>
     <StatusBar barStyle="light-content" backgroundColor={colors.navy} />
@@ -153,12 +158,13 @@ function RelayApp() {
             <View style={{ flex: 1 }}><Text style={{ color: '#FFFFFF', fontSize: 21, fontWeight: '900', letterSpacing: 0.5 }}>RESQ</Text><Text numberOfLines={1} style={{ color: '#A9BBD1', fontSize: language === 'ml' ? 9 : 10, fontWeight: '700', letterSpacing: language === 'ml' ? 0.1 : 1.4 }}>{word(language, 'COLLECT FASTER. RESPOND SMARTER.', 'വേഗം ശേഖരിക്കുക. മികച്ച പ്രതികരണം.')}</Text></View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            {route !== 'assistant' ? headerButton(word(language, 'Open RESQ Assistant', 'RESQ അസിസ്റ്റന്റ് തുറക്കുക'), 'chatbubbles-outline', () => navigate('assistant')) : null}
-            {headerButton(word(language, 'Sync with server now', 'സെർവറുമായി സിങ്ക് ചെയ്യുക'), 'sync-outline', () => void sync(), !ready || syncing || configSaving || config.forceOffline, syncing)}
+            {headerButton(word(language, 'Ask RESQ AI', 'RESQ AI-യോട് ചോദിക്കുക'), 'sparkles-outline', () => navigate('assistant'))}
+            <View>{headerButton(word(language, `Notifications, ${unread} unread`, `അറിയിപ്പുകൾ, ${unread}`), 'notifications-outline', () => navigate('notifications'))}{unread ? <View pointerEvents="none" style={{ position: 'absolute', top: 4, right: 4, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>{unread}</Text></View> : null}</View>
+            {headerButton(word(language, 'Profile and settings', 'പ്രൊഫൈൽ, ക്രമീകരണം'), 'person-circle-outline', () => navigate('settings'))}
           </View>
         </View>
         <View style={[ui.between, { flexWrap: 'wrap' }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={word(language, 'Change demo role', 'ഡെമോ ഉപയോക്തൃവിഭാഗം മാറ്റുക')} onPress={() => navigate('settings')} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', minHeight: 44, flexShrink: 1 }}><Icon name={roleInfo[role].icon} size={16} color="#C9D6E6" /><Text style={{ color: '#E2EAF4', fontSize: 12, fontWeight: '700' }}>{word(language, `DEMO · ${roleInfo[role].title}`, `ഡെമോ · ${roleInfo[role].ml}`)}</Text><Icon name="chevron-down-outline" size={13} color="#C9D6E6" /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={word(language, 'Change demo role', 'ഡെമോ ഉപയോക്തൃവിഭാഗം മാറ്റുക')} onPress={() => navigate('settings')} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', minHeight: 44, flexShrink: 1 }}><Icon name={roleInfo[role].icon} size={16} color="#C9D6E6" /><Text style={{ color: '#E2EAF4', fontSize: 12, fontWeight: '700' }}>{word(language, `DEMO · ${roleInfo[role].title} · Kottayam`, `ഡെമോ · ${roleInfo[role].ml} · കോട്ടയം`)}</Text><Icon name="chevron-down-outline" size={13} color="#C9D6E6" /></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={`${connectionLabel}. ${word(language, 'Open outbox', 'ഔട്ട്ബോക്സ് തുറക്കുക')}`} onPress={() => navigate('queue')} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', minHeight: 44 }}><View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: connectionState === 'reachable' ? colors.green : connectionState === 'unreachable' ? colors.red : colors.orange }} /><Text style={{ color: '#C9D6E6', fontSize: 12 }}>{config.forceOffline ? word(language, 'Offline mode', 'ഓഫ്‌ലൈൻ') : connectionLabel}{queue.length ? ` · ${queue.length} ${word(language, 'queued', 'ക്യൂവിൽ')}` : ''}</Text></Pressable>
         </View>
       </View>
@@ -183,7 +189,11 @@ function RelayApp() {
         {(route === 'home' || route === 'inventory' || route === 'dispatch') && role === 'relief' ? <ReliefHome view={route === 'home' ? 'requests' : route} reports={reports} tick={tick} onOpen={open} /> : null}
         {route === 'shelters' ? <SheltersScreen role={role} tick={tick} /> : null}
         {route === 'safety' ? <SafetyScreen language={language} alerts={alerts} /> : null}
-        {route === 'assistant' ? <AssistantScreen key={role} role={role} language={language} reportId={role === 'coordinator' ? contextId : undefined} onNavigate={navigate} /> : null}
+        {route === 'safezones' ? <SafeZonesScreen role={role} language={language} tick={tick} /> : null}
+        {route === 'notifications' ? <View style={{ gap: 12 }}><Text style={ui.h2}>{word(language, 'Official alerts', 'ഔദ്യോഗിക മുന്നറിയിപ്പുകൾ')}</Text>
+          {alerts.length ? alerts.map(a => <Notice key={a.id} tone={a.severity === 'danger' ? 'error' : a.severity === 'warning' ? 'warning' : 'info'} title={a.title} text={`${a.body}\n${a.area} · ${dateLabel(a.created_at, language)}`}>{dismissed && !dismissed.has(a.id) ? <Button title={word(language, 'Mark as read', 'വായിച്ചു')} tone="quiet" onPress={() => readAlert(a.id)} /> : null}</Notice>)
+            : <Text style={ui.small}>{word(language, 'No active official alerts. Only alerts published by government officials in RESQ appear here.', 'സജീവ മുന്നറിയിപ്പുകൾ ഇല്ല.')}</Text>}</View> : null}
+        {route === 'assistant' ? <AssistantScreen key={role} role={role} language={language} reportId={role === 'coordinator' ? contextId : undefined} online={!config.forceOffline && connection.state !== 'unreachable'} onNavigate={navigate} /> : null}
         {route === 'map' ? <MapScreen language={language} role={role} reports={reports} tick={tick} online={!config.forceOffline && connection.state !== 'unreachable'} /> : null}
         {route === 'queue' ? <OutboxScreen role={role} language={language} queue={queue} onRefresh={refresh} onSync={() => void sync()} syncing={syncing} offline={config.forceOffline} /> : null}
         {route === 'settings' || route === 'more' ? <SettingsScreen role={role} config={config} language={language} onRole={switchRole} onConfig={updateConfig} syncing={syncing || configSaving} queuedCount={queue.length} connection={connection} /> : null}

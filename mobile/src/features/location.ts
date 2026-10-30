@@ -1,4 +1,7 @@
 import * as Location from 'expo-location';
+import { Linking } from 'react-native';
+import { directionsUrl, validPoint, type TravelMode } from '../core/facilities';
+import type { Point } from '../core/geo';
 import * as service from '../core/services';
 import type { LocationFix } from '../core/types';
 import { word, type Language } from '../ui/words';
@@ -31,6 +34,28 @@ export async function locateWithFallback(onStep?: (step: string) => void, fast =
   }
   onStep?.('saved');
   try { const saved = await service.loadLastFix(); return saved ? { ...saved, source: 'saved' } : null; } catch { return null; }
+}
+/** A position that is genuinely current (GPS, network, or a phone fix under 5 minutes old), or null.
+ * Unlike locateWithFallback this never returns an old saved fix, so it is safe to use as a route origin. */
+export async function currentPosition(): Promise<{ fix: LocationFix | null; denied: boolean }> {
+  let permitted = false;
+  try { permitted = (await Location.requestForegroundPermissionsAsync()).status === 'granted'; } catch { /* treated as denied */ }
+  if (!permitted) return { fix: null, denied: true };
+  const gps = await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).catch(() => null), 8000);
+  if (gps) return { fix: await remember(toFix(gps, 'gps')), denied: false };
+  const network = await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest }).catch(() => null), 5000);
+  if (network) return { fix: await remember(toFix(network, 'network')), denied: false };
+  const last = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 }).catch(() => null);
+  return { fix: last ? toFix(last, 'last-known') : null, denied: false };
+}
+
+/** Opens Google Maps directions: origin = current position when available, destination = the selected facility.
+ * Without a current position the origin is omitted and Google Maps uses the device location or asks for a start. */
+export async function openGoogleMapsDirections(destination: Point, travelMode: TravelMode, known?: LocationFix | null): Promise<{ usedOrigin: boolean; denied: boolean }> {
+  if (!validPoint(destination)) throw new Error('This facility has no valid coordinates, so directions cannot be opened.');
+  const fresh = known && Date.now() - known.at < 5 * 60 * 1000 && known.source !== 'saved' ? { fix: known, denied: false } : await currentPosition();
+  await Linking.openURL(directionsUrl(destination, fresh.fix, travelMode));
+  return { usedOrigin: !!fresh.fix, denied: fresh.denied };
 }
 async function remember(fix: LocationFix): Promise<LocationFix> {
   try { await service.saveLastFix(fix); } catch { /* A missing cache only weakens the next fallback. */ }

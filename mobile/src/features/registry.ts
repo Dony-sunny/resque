@@ -2,7 +2,7 @@ import type { Role } from '../core/types';
 import type { IconName } from '../ui/components';
 
 export type Route = 'home' | 'create' | 'requests' | 'safety' | 'assistant' | 'relay' | 'map' | 'shelters' | 'queue' | 'settings'
-  | 'incidents' | 'teams' | 'more' | 'audit' | 'updates' | 'resources' | 'inventory' | 'dispatch';
+  | 'incidents' | 'teams' | 'more' | 'audit' | 'updates' | 'resources' | 'inventory' | 'dispatch' | 'safezones' | 'notifications';
 type Tab = { id: Route; label: string; ml: string; icon: IconName };
 
 /** Bottom navigation per role. Server permissions remain authoritative; other routes open from inside screens. */
@@ -10,16 +10,16 @@ export const tabs: Record<Role, Tab[]> = {
   citizen: [
     { id: 'home', label: 'Home', ml: 'ഹോം', icon: 'home-outline' },
     { id: 'create', label: 'SOS', ml: 'SOS', icon: 'alert-circle-outline' },
+    { id: 'safezones', label: 'Safe Zones', ml: 'സുരക്ഷിതം', icon: 'map-outline' },
     { id: 'requests', label: 'Requests', ml: 'അഭ്യർത്ഥനകൾ', icon: 'list-outline' },
-    { id: 'safety', label: 'Safety', ml: 'സുരക്ഷ', icon: 'shield-checkmark-outline' },
-    { id: 'assistant', label: 'Help', ml: 'സഹായം', icon: 'chatbubbles-outline' },
+    { id: 'more', label: 'More', ml: 'കൂടുതൽ', icon: 'menu-outline' },
   ],
   volunteer: [
     { id: 'home', label: 'Home', ml: 'ഹോം', icon: 'home-outline' },
     { id: 'create', label: 'Collect', ml: 'ശേഖരിക്കുക', icon: 'add-circle-outline' },
     { id: 'relay', label: 'Relay', ml: 'കൈമാറ്റം', icon: 'qr-code-outline' },
     { id: 'requests', label: 'Requests', ml: 'അഭ്യർത്ഥനകൾ', icon: 'list-outline' },
-    { id: 'assistant', label: 'Help', ml: 'സഹായം', icon: 'chatbubbles-outline' },
+    { id: 'more', label: 'More', ml: 'കൂടുതൽ', icon: 'menu-outline' },
   ],
   coordinator: [
     { id: 'home', label: 'Overview', ml: 'അവലോകനം', icon: 'speedometer-outline' },

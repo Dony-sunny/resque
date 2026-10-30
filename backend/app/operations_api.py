@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from . import assistant, demo, ops
 from .auth import current_user
-from .models import Assignment, AuditLog, IncidentDetail, InventoryItem, MissionAssignment, ReliefRequest, Report, RescueTeam, Shelter, now
+from .models import Assignment, AuditLog, Facility, IncidentDetail, InventoryItem, MissionAssignment, ReliefRequest, Report, RescueTeam, Shelter, now
 from .service import audit, serialize_report, visible
 
 router = APIRouter(prefix="/v1")
@@ -159,6 +159,18 @@ def restock(key: str, body: Restock, request: Request, user=Depends(current_user
 def shelters(request: Request, user=Depends(current_user)):
     with Session(engine_of(request)) as db:
         return [ops.shelter_view(s) for s in db.scalars(select(Shelter).order_by(Shelter.name))]
+
+
+@router.get("/facilities")
+def facilities(request: Request, category: str | None = None, user=Depends(current_user)):
+    """Safe zones for the map. Rows with invalid coordinates are never returned."""
+    if category is not None and category not in ops.FACILITY_CATEGORIES:
+        raise HTTPException(422, f"category must be one of {', '.join(ops.FACILITY_CATEGORIES)}")
+    with Session(engine_of(request)) as db:
+        query = select(Facility).order_by(Facility.name)
+        if category:
+            query = query.where(Facility.category == category)
+        return [ops.facility_view(db, f) for f in db.scalars(query) if ops.valid_point(f.latitude, f.longitude)]
 
 
 @router.post("/shelters/{shelter_id}/occupancy")

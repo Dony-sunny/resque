@@ -201,6 +201,25 @@ def shelter_view(row):
             "status": status, "simulated": row.simulated}
 
 
+FACILITY_CATEGORIES = ("shelter", "relief_camp", "hospital", "relief_center")
+
+
+def valid_point(lat, lon) -> bool:
+    return isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and -90 <= lat <= 90 and -180 <= lon <= 180 and not (lat == 0 and lon == 0)
+
+
+def facility_view(db, row):
+    """Capacity, occupancy and open/full status only when a Shelter record supplies them; never invented."""
+    shelter = db.get(Shelter, row.shelter_id) if row.shelter_id else None
+    live = shelter_view(shelter) if shelter else None
+    return {"id": row.id, "name": row.name, "category": row.category, "latitude": row.latitude, "longitude": row.longitude,
+            "address": row.address, "locality": row.locality, "district": row.district, "state": row.state,
+            "capacity": live["capacity"] if live else None, "occupancy": live["occupancy"] if live else None,
+            "remaining": live["remaining"] if live else None, "services": row.services,
+            "availability_status": live["status"] if live else "unknown", "last_updated": iso(row.updated_at),
+            "phone": row.phone, "notes": row.notes, "is_simulated": row.simulated, "verification_status": row.verification}
+
+
 def set_occupancy(db, row, occupancy, actor):
     if occupancy < 0 or occupancy > row.capacity:
         raise OpsError(f"Occupancy must be between 0 and capacity ({row.capacity})", 422)

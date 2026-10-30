@@ -11,7 +11,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 from . import ops
 from .auth import ensure_demo_users
-from .models import (Alert, Assignment, Audit, AuditLog, Dispatch, DuplicateLink, IncidentDetail, InventoryItem, MissionAssignment,
+from .models import (Alert, Assignment, Audit, AuditLog, Dispatch, DuplicateLink, Facility, IncidentDetail, InventoryItem, MissionAssignment,
                      Note, ReliefRequest, Report, RescueTeam, Shelter, Submission, SyncReceipt, User, now)
 from .schemas import ReportInput
 from .service import digest
@@ -31,6 +31,19 @@ SHELTERS = [
     ("shelter-kottayam", "Govt. HSS Kottayam", "Kottayam town", 9.5870, 76.5250, 500, 420, ["food", "water", "toilets"]),
     ("shelter-pala", "Pala Parish Hall", "Pala", 9.7100, 76.6850, 200, 200, ["food", "water"]),
     ("shelter-changanassery", "Changanassery Community Centre", "Changanassery", 9.4460, 76.5400, 250, 60, ["food", "water", "medical", "power"]),
+]
+# (id, name, category, lat, lon, address, locality, linked shelter, services). Demo points around Kottayam; no phone
+# numbers because none are verified. Shelters and camps take capacity and status from their linked Shelter row.
+FACILITIES = [
+    ("fac-govt-hss", "Govt. HSS Kottayam", "shelter", 9.5870, 76.5250, "Near Baker Junction, Kottayam town", "Kottayam", "shelter-kottayam", ["food", "water", "toilets"]),
+    ("fac-pala-hall", "Pala Parish Hall", "shelter", 9.7100, 76.6850, "Town centre, Pala", "Pala", "shelter-pala", ["food", "water"]),
+    ("fac-st-marys", "St. Mary's School relief camp", "relief_camp", 9.6190, 76.4290, "Near the boat jetty, Kumarakom", "Kumarakom", "shelter-kumarakom", ["food", "water", "medical"]),
+    ("fac-changanassery", "Changanassery Community Centre camp", "relief_camp", 9.4460, 76.5400, "Main Central Road, Changanassery", "Changanassery", "shelter-changanassery", ["food", "water", "medical", "power"]),
+    ("fac-medical-college", "Government Medical College Hospital", "hospital", 9.6280, 76.5200, "Gandhinagar, Kottayam", "Gandhinagar", None, ["24x7 casualty", "trauma care"]),
+    ("fac-district-hospital", "District Hospital Kottayam", "hospital", 9.5880, 76.5205, "Kottayam town", "Kottayam", None, ["casualty", "ambulance base"]),
+    ("fac-gh-changanassery", "General Hospital Changanassery", "hospital", 9.4440, 76.5420, "Changanassery town", "Changanassery", None, ["casualty"]),
+    ("fac-collectorate-relief", "District relief collection centre", "relief_center", 9.5916, 76.5222, "Collectorate, Kottayam", "Kottayam", None, ["food packets", "water", "blankets"]),
+    ("fac-ettumanoor-relief", "Ettumanoor relief supply point", "relief_center", 9.6700, 76.5600, "Ettumanoor market road", "Ettumanoor", None, ["food packets", "medicine kits"]),
 ]
 INVENTORY = [("food_packets", "Food packets", "packets", "supply", 2000, 300), ("water_bottles", "Water bottles", "1 L bottles", "supply", 3000, 500),
              ("medicine_kits", "Medicine kits", "kits", "supply", 150, 30), ("blankets", "Blankets", "pieces", "supply", 400, 60),
@@ -136,6 +149,12 @@ def reset_demo(engine):
         for shelter_id, name, area, lat, lon, capacity, occupancy, facilities in SHELTERS:
             db.merge(Shelter(id=shelter_id, name=name, area=area, latitude=lat, longitude=lon, capacity=capacity, occupancy=occupancy,
                              facilities=facilities, open=True, simulated=True))
+        db.flush()
+        for fid, name, category, lat, lon, address, locality, shelter_id, services in FACILITIES:
+            db.merge(Facility(id=fid, name=name, category=category, latitude=lat, longitude=lon, address=address, locality=locality,
+                              district="Kottayam", state="Kerala", shelter_id=shelter_id, services=services, phone=None,
+                              notes="SIMULATED demo location for the hackathon; not an operational facility.",
+                              verification="unverified", simulated=True, updated_at=now()))
         for key, name, unit, kind, total, low in INVENTORY:
             db.merge(InventoryItem(key=key, name=name, unit=unit, kind=kind, total=total, reserved=0, low_threshold=low))
         db.flush()

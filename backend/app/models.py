@@ -206,6 +206,28 @@ class Shelter(Base):
     simulated: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class Facility(Base):
+    """A safe zone shown on the map: shelter, relief camp, hospital or relief centre.
+    Shelters and camps link to a Shelter row, which holds their live capacity and occupancy."""
+    __tablename__ = "facilities"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    category: Mapped[str] = mapped_column(String(20), index=True)
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    address: Mapped[str] = mapped_column(String(200))
+    locality: Mapped[str] = mapped_column(String(80))
+    district: Mapped[str] = mapped_column(String(80))
+    state: Mapped[str] = mapped_column(String(80))
+    shelter_id: Mapped[str | None] = mapped_column(ForeignKey("shelters.id"), nullable=True)
+    services: Mapped[list] = mapped_column(JSON, default=list)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    verification: Mapped[str] = mapped_column(String(20), default="unverified")
+    simulated: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class AuditLog(Base):
     """Chronological operations log across incidents, missions, relief and shelters."""
     __tablename__ = "audit_log"

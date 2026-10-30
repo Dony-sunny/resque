@@ -13,7 +13,7 @@ type Message = { id: number; from: 'me' | 'bot'; text: string; reply?: Assistant
 const modeLabel = { ai: 'AI answer · RESQ data for your role', guide: 'Safety guide · RESQ server data', offline: 'Offline Safety Guide' };
 
 /** RESQ Assistant: help and guidance. It can suggest where to go in the app, but never changes records. */
-export function AssistantScreen({ role, language, reportId, onNavigate }: { role: Role; language: Language; reportId?: string; onNavigate: (route: Route) => void }) {
+export function AssistantScreen({ role, language, reportId, online, onNavigate }: { role: Role; language: Language; reportId?: string; online: boolean; onNavigate: (route: Route) => void }) {
   const victim = role === 'citizen' || role === 'volunteer';
   const [messages, setMessages] = useState<Message[]>([{ id: 0, from: 'bot', text: word(language, 'Hi, I am RESQ Assistant. Ask about safety, shelters or your request. In danger now? Use SOS or call 112 — you do not need to chat first.', 'ഞാൻ RESQ അസിസ്റ്റന്റ്. അപകടത്തിലാണെങ്കിൽ ഉടൻ SOS അമർത്തുക അല്ലെങ്കിൽ 112 വിളിക്കുക.') }]);
   const [text, setText] = useState('');
@@ -37,7 +37,7 @@ export function AssistantScreen({ role, language, reportId, onNavigate }: { role
     <View style={ui.between}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flex: 1 }}>
         <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' }}><Icon name="chatbubbles-outline" color="#FFFFFF" /></View>
-        <View style={{ flex: 1 }}><Text style={ui.h2}>RESQ Assistant</Text><Text style={ui.small}>{word(language, 'Guidance only · cannot dispatch help', 'മാർഗനിർദേശം മാത്രം')}</Text></View>
+        <View style={{ flex: 1 }}><Text style={ui.h2}>RESQ Assistant</Text><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: online ? colors.green : colors.orange }} /><Text style={ui.small}>{online ? word(language, 'Online · guidance only, cannot dispatch help', 'ഓൺലൈൻ · മാർഗനിർദേശം മാത്രം') : word(language, 'Offline Safety Guide', 'ഓഫ്‌ലൈൻ സുരക്ഷാ ഗൈഡ്')}</Text></View></View>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={word(language, 'Close assistant', 'അസിസ്റ്റന്റ് അടയ്ക്കുക')} onPress={() => onNavigate('home')} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" color={colors.muted} size={26} /></Pressable>
     </View>

@@ -69,7 +69,7 @@ def actions_for(intent: str, role: str) -> list[dict]:
     table = {"urgent": [{"label": "Send SOS now", "route": "create"}, {"label": "Call 112", "call": "112"}] if victim else [{"label": "Call 112", "call": "112"}],
              "report": [{"label": "Open SOS form", "route": "create"}] if victim else [],
              "status": [{"label": "Open my requests", "route": "requests"}] if victim else [],
-             "shelter": [{"label": "Shelters on map", "route": "map"}],
+             "shelter": [{"label": "Open Safe Zones", "route": "safezones"}],
              "contacts": [{"label": "Call 112", "call": "112"}],
              "safety": [{"label": "Safety guides", "route": "safety"}] if victim else []}
     return table.get(intent, [])
