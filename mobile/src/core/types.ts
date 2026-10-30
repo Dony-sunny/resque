@@ -22,7 +22,7 @@ export interface ServerReport extends ReportInput {
   mission_status: MissionStatus; updated_at: string; version: number; notes: Note[]; audit: Audit[];
   /** Server-computed operational view (not part of the immutable report). */
   details?: Details; priority?: Priority; resources?: ResourceRow[]; team?: { id: string; name: string; simulated: boolean } | null;
-  duplicates?: string[]; duplicate_of?: string | null; linked_duplicates?: string[]; relief?: ReliefSummary[]; support?: SupportEntry[];
+  provenance?: Provenance; duplicates?: string[]; duplicate_of?: string | null; linked_duplicates?: string[]; relief?: ReliefSummary[]; support?: SupportEntry[];
 }
 export type PriorityLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 export interface PriorityFactor { factor: 'severity' | 'vulnerability' | 'people' | 'waiting' | 'confidence'; weight: number; value: number; contribution: number; explanation: string }
@@ -41,6 +41,11 @@ export interface FacilityView {
   capacity: number | null; occupancy: number | null; remaining: number | null; services: string[]; availability_status: 'open' | 'full' | 'closed' | 'unknown';
   last_updated: string; phone: string | null; notes: string; is_simulated: boolean; verification_status: string;
 }
+/** /v1/map/impact: precise points for officials (and a responder's own missions), grid-cell aggregates for everyone else. */
+export interface ImpactPoint { latitude: number; longitude: number; weight: number; verified: boolean | number; aggregated: boolean; incident_id?: string; count?: number }
+export interface ImpactData { mode: 'precise' | 'assigned-precise' | 'aggregated'; points: ImpactPoint[]; contributing_reports: number; insufficient: boolean; simulated_reports: number; generated_at: string; cell_km: number | null; formula: string }
+export interface ReliefDemandData { points: { latitude: number; longitude: number; weight: number; requests: number; items: Record<string, number>; shortage: string[] }[]; shortages: string[]; free_stock: Record<string, number>; generated_at: string; cell_km: number }
+export interface Provenance { source: 'citizen' | 'community_relay' | 'responder' | 'unknown'; relay_carriers: number; simulated: boolean }
 export interface OpsSummary { active_sos: number; critical: number; unassigned: number; teams_available: number; teams_total: number; pending_relief: number; dispatches_active: number; open_shelters: number; shelter_space: number; people_affected: number; low_stock: InventoryView[]; shortages: { key: string; required: number; available: number; shortfall: number }[] }
 export interface AuditRow { id: string; actor: string; action: string; entity: string; entity_id: string; incident_id: string | null; previous_status: string | null; new_status: string | null; detail: string; created_at: string }
 export interface Report extends Omit<ServerReport, 'delivery_state'> {

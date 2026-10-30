@@ -1,6 +1,7 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { WebView } from 'react-native-webview';
 import type { Point } from '../core/geo';
+import type { WebHeat } from '../core/heat';
 
 /** glyph: a symbol drawn inside the pin so categories never rely on colour alone. */
 export interface WebPin { id: string; point: Point; color: string; title: string; detail: string; square: boolean; glyph?: string }
@@ -11,15 +12,16 @@ export interface WebMapHandle { focus(id: string): void; recenter(): void }
  * Tiles need internet; callers show a list fallback when onTileError fires. */
 export const WebMap = forwardRef<WebMapHandle, {
   pins: WebPin[]; me: (Point & { accuracy: number | null }) | null; height: number; onSelect: (id: string) => void;
-  selectedId?: string; interactive?: boolean; onTileError?: () => void; onPress?: () => void;
-}>(function WebMap({ pins, me, height, onSelect, selectedId, interactive = true, onTileError, onPress }, ref) {
+  selectedId?: string; interactive?: boolean; onTileError?: () => void; onPress?: () => void; heat?: WebHeat | null; onHeatError?: () => void;
+}>(function WebMap({ pins, me, height, onSelect, selectedId, interactive = true, onTileError, onPress, heat, onHeatError }, ref) {
   const view = useRef<WebView>(null);
   useImperativeHandle(ref, () => ({
     focus: id => view.current?.injectJavaScript(`window.focusPin(${JSON.stringify(id)}); true;`),
     recenter: () => view.current?.injectJavaScript('window.recenter(); true;'),
   }), []);
   // Rebuild the page only when the data changes; JSON is escaped for safe embedding in a script tag.
-  const html = useMemo(() => page(JSON.stringify({ pins, me, selectedId: selectedId || null, interactive }).replace(/</g, '\\u003c')), [pins, me, interactive]);
+  // Switching Street ↔ Heatmap rebuilds the page, so old layers and listeners are discarded with it (no stacking or leaks).
+  const html = useMemo(() => page(JSON.stringify({ pins, me, selectedId: selectedId || null, interactive, heat: heat || null }).replace(/</g, '\\u003c')), [pins, me, interactive, heat]);
   return <WebView ref={view} originWhitelist={['*']} source={{ html, baseUrl: 'https://resq-relay.local/' }} style={{ height, backgroundColor: '#E8EAED' }}
     javaScriptEnabled domStorageEnabled setSupportMultipleWindows={false} nestedScrollEnabled={interactive} scrollEnabled={interactive}
     onMessage={event => { try {
@@ -27,6 +29,7 @@ export const WebMap = forwardRef<WebMapHandle, {
       if (data.select) onSelect(data.select);
       if (data.tileError) onTileError?.();
       if (data.press) onPress?.();
+      if (data.heatError) onHeatError?.();
     } catch { /* Ignore page noise. */ } }} />;
 });
 
@@ -34,6 +37,7 @@ function page(data: string) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <style>
 html,body,#m{margin:0;height:100%;background:#E8EAED;font-family:Roboto,Arial,sans-serif}
 .pin svg{filter:drop-shadow(0 2px 2px rgba(0,0,0,.35))}
@@ -62,6 +66,11 @@ var marks={},pins={},pts=[],sel=null;
 D.pins.forEach(function(p){pins[p.id]=p;var m=L.marker([p.point.latitude,p.point.longitude],{icon:icon(p,false),keyboard:true,title:p.title,alt:p.title}).addTo(map).bindPopup('<b>'+esc(p.title)+'</b><br><span>'+esc(p.detail)+'</span>');
 m.on('click',function(){highlight(p.id);post({select:p.id})});marks[p.id]=m;pts.push([p.point.latitude,p.point.longitude]);});
 function highlight(id){if(sel&&marks[sel])marks[sel].setIcon(icon(pins[sel],false)).setZIndexOffset(0);sel=id;if(marks[id])marks[id].setIcon(icon(pins[id],true)).setZIndexOffset(1000);}
+if(D.heat){
+if(!L.heatLayer){post({heatError:true});}else{
+L.heatLayer(D.heat.points,{radius:D.heat.radius||30,blur:24,maxZoom:13,max:1,minOpacity:0.25,gradient:D.heat.gradient||{0.2:'#FDE68A',0.5:'#F59E0B',0.8:'#DC2626',1:'#7F1D1D'}}).addTo(map);
+D.heat.points.forEach(function(p){pts.push([p[0],p[1]])});}
+(D.heat.rings||[]).forEach(function(p){L.circleMarker(p,{radius:9,color:'#09182B',weight:2,dashArray:'3 3',fill:false,interactive:false}).addTo(map)});}
 var ll=null;
 if(D.me){ll=[D.me.latitude,D.me.longitude];pts.push(ll);
 if(D.me.accuracy)L.circle(ll,{radius:D.me.accuracy,color:'#1A73E8',weight:1,fillColor:'#1A73E8',fillOpacity:.12,interactive:false}).addTo(map);

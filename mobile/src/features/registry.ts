@@ -16,9 +16,9 @@ export const tabs: Record<Role, Tab[]> = {
   ],
   volunteer: [
     { id: 'home', label: 'Home', ml: 'ഹോം', icon: 'home-outline' },
-    { id: 'create', label: 'Collect', ml: 'ശേഖരിക്കുക', icon: 'add-circle-outline' },
-    { id: 'relay', label: 'Relay', ml: 'കൈമാറ്റം', icon: 'qr-code-outline' },
-    { id: 'requests', label: 'Requests', ml: 'അഭ്യർത്ഥനകൾ', icon: 'list-outline' },
+    { id: 'relay', label: 'Scan QR', ml: 'QR സ്കാൻ', icon: 'qr-code-outline' },
+    { id: 'requests', label: 'Relay queue', ml: 'കൈമാറ്റ ക്യൂ', icon: 'list-outline' },
+    { id: 'map', label: 'Map', ml: 'ഭൂപടം', icon: 'map-outline' },
     { id: 'more', label: 'More', ml: 'കൂടുതൽ', icon: 'menu-outline' },
   ],
   coordinator: [
@@ -38,6 +38,7 @@ export const tabs: Record<Role, Tab[]> = {
     { id: 'home', label: 'Requests', ml: 'അഭ്യർത്ഥനകൾ', icon: 'mail-outline' },
     { id: 'inventory', label: 'Inventory', ml: 'സ്റ്റോക്ക്', icon: 'layers-outline' },
     { id: 'dispatch', label: 'Dispatch', ml: 'വിതരണം', icon: 'car-outline' },
+    { id: 'map', label: 'Map', ml: 'ഭൂപടം', icon: 'map-outline' },
     { id: 'shelters', label: 'Shelters', ml: 'ക്യാമ്പുകൾ', icon: 'home-outline' },
   ],
 };
@@ -47,5 +48,5 @@ export const roleInfo: Record<Role, { title: string; ml: string; description: st
   coordinator: { title: 'Government Official', ml: 'സർക്കാർ ഉദ്യോഗസ്ഥൻ', description: 'Prioritise incidents. Assign teams. Publish alerts.', descriptionMl: 'സംഭവങ്ങൾ മുൻഗണനയിലാക്കുക. സംഘങ്ങളെ നിയോഗിക്കുക.', workspace: 'Command centre', workspaceMl: 'കമാൻഡ് സെന്റർ', icon: 'business-outline' },
   responder: { title: 'Rescue Team', ml: 'രക്ഷാസംഘം', description: 'Receive missions. Update progress. Request support.', descriptionMl: 'ദൗത്യങ്ങൾ സ്വീകരിക്കുക. പുരോഗതി രേഖപ്പെടുത്തുക.', workspace: 'Team Alpha missions', workspaceMl: 'ടീം ആൽഫ ദൗത്യങ്ങൾ', icon: 'shield-checkmark-outline' },
   relief: { title: 'Food & Relief', ml: 'ഭക്ഷണം & ദുരിതാശ്വാസം', description: 'Allocate stock. Dispatch supplies. Manage shelters.', descriptionMl: 'സാധനങ്ങൾ വിതരണം ചെയ്യുക. ക്യാമ്പുകൾ നിയന്ത്രിക്കുക.', workspace: 'Relief operations', workspaceMl: 'ദുരിതാശ്വാസ പ്രവർത്തനം', icon: 'cube-outline' },
-  volunteer: { title: 'Community volunteer (QR relay)', ml: 'സന്നദ്ധപ്രവർത്തകൻ (QR കൈമാറ്റം)', description: 'Collect reports offline. Carry them to the network.', descriptionMl: 'റിപ്പോർട്ടുകൾ ശേഖരിച്ച് കണക്ഷൻ ലഭിക്കുമ്പോൾ അയയ്ക്കുക.', workspace: 'Be the missing connection.', workspaceMl: 'സഹായത്തിലേക്കുള്ള ബന്ധമാകുക.', icon: 'people-outline' },
+  volunteer: { title: 'Community QR Relay', ml: 'കമ്മ്യൂണിറ്റി QR കൈമാറ്റം', description: 'Collect reports offline. Carry them to the network.', descriptionMl: 'റിപ്പോർട്ടുകൾ ശേഖരിച്ച് കണക്ഷൻ ലഭിക്കുമ്പോൾ അയയ്ക്കുക.', workspace: 'Be the missing connection.', workspaceMl: 'സഹായത്തിലേക്കുള്ള ബന്ധമാകുക.', icon: 'people-outline' },
 };

@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import type { AssistantReply } from './assistant';
-import type { AlertInput, AuditRow, AuthorityAlert, BackendHealth, FacilityView, InventoryView, OpsSummary, ReliefRequestView, Role, ServerReport, ShelterView, SyncEvent, SyncResponse, TeamView, Transport, User } from './types';
+import type { AlertInput, AuditRow, AuthorityAlert, BackendHealth, FacilityView, ImpactData, ReliefDemandData, InventoryView, OpsSummary, ReliefRequestView, Role, ServerReport, ShelterView, SyncEvent, SyncResponse, TeamView, Transport, User } from './types';
 
 export function normalizeApiUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '');
@@ -81,6 +81,8 @@ export class ApiClient implements Transport {
   escalate(reportId: string): Promise<ServerReport> { return this.post(`/incidents/${reportId}/escalate`); }
   auditLog(): Promise<AuditRow[]> { return this.authenticated('/audit'); }
   facilities(): Promise<FacilityView[]> { return this.authenticated('/facilities'); }
+  impact(): Promise<ImpactData> { return this.authenticated('/map/impact'); }
+  reliefDemand(): Promise<ReliefDemandData> { return this.authenticated('/map/relief-demand'); }
   releaseTeam(reportId: string): Promise<ServerReport> { return this.post(`/incidents/${reportId}/release`); }
   ask(message: string, reportId?: string): Promise<AssistantReply> { return this.post('/assistant', reportId ? { message, report_id: reportId } : { message }); }
   demoReset(): Promise<Record<string, number>> { return this.post('/demo/reset'); }

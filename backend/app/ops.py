@@ -4,7 +4,7 @@ from datetime import timedelta, timezone
 from sqlalchemy import select
 from . import estimate, priority
 from .models import (AuditLog, Dispatch, DuplicateLink, IncidentDetail, InventoryItem, MissionAssignment,
-                     ReliefRequest, Report, RescueTeam, Shelter, now)
+                     ReliefRequest, Report, RescueTeam, Shelter, Submission, User, now)
 
 ACTIVE_MISSION = ("assigned", "accepted", "en_route", "on_scene", "in_progress")
 RELIEF_FLOW = {"requested": ("approved", "cancelled"), "approved": ("packed", "cancelled"),
@@ -120,6 +120,15 @@ def pool(db):
             "shelter_places": sum(max(0, s.capacity - s.occupancy) for s in shelters)}
 
 
+def provenance(db, report):
+    """Where a report came from, so officials can tell direct, relayed, responder and simulated reports apart."""
+    carriers = db.scalars(select(User.role).join(Submission, Submission.user_id == User.id).where(Submission.report_id == report.id)).all()
+    origin = db.get(User, report.origin_id)
+    relays = sum(1 for role in carriers if role == "volunteer")
+    source = "community_relay" if relays else "responder" if origin is not None and origin.role == "responder" else "citizen" if report.owner_id else "unknown"
+    return {"source": source, "relay_carriers": relays, "simulated": report.description.startswith("[SIMULATED]")}
+
+
 def insight(db, report, available=None):
     details = details_of(db, report.id)
     candidates = duplicate_candidates(db, report)
@@ -131,7 +140,7 @@ def insight(db, report, available=None):
     relief = [{"id": r.id, "status": r.status, "items": r.items, "requester_role": r.requester_role, "updated_at": iso(r.updated_at)}
               for r in db.scalars(select(ReliefRequest).where(ReliefRequest.incident_id == report.id).order_by(ReliefRequest.created_at))]
     return {"details": details, "priority": rank, "resources": estimate.compare(need, available if available is not None else pool(db)),
-            "team": team_for_report(db, report), "duplicates": candidates, "duplicate_of": link.duplicate_of if link else None,
+            "team": team_for_report(db, report), "provenance": provenance(db, report), "duplicates": candidates, "duplicate_of": link.duplicate_of if link else None,
             "linked_duplicates": linked_here, "relief": relief, "support": details.get("support", [])}
 
 

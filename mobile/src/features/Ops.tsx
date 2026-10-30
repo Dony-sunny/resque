@@ -84,6 +84,7 @@ export function IncidentRow({ report, onPress, pending }: { report: Report; onPr
       {p?.life_threat ? <Badge label="LIFE THREAT" tone="danger" /> : null}
       {report.duplicates?.length ? <Badge label={`${report.duplicates.length} POSSIBLE DUPLICATE`} tone="warning" /> : null}
       {report.duplicate_of ? <Badge label="LINKED DUPLICATE" /> : null}
+      {report.provenance?.source === 'community_relay' ? <Badge label="VIA COMMUNITY QR RELAY" tone="warning" /> : report.provenance?.source === 'responder' ? <Badge label="RESPONDER REPORT" /> : null}
       {report.description.startsWith('[SIMULATED]') ? <Badge label="SIMULATED" /> : null}
       {pending ? <Badge label={`${pending} queued`} tone="warning" /> : null}
     </View>

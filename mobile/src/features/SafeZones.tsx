@@ -9,13 +9,14 @@ import { colors, ui } from '../ui/theme';
 import { dateLabel, word, type Language } from '../ui/words';
 import { currentPosition, describeFix, openGoogleMapsDirections } from './location';
 import { WebMap, type WebMapHandle, type WebPin } from './WebMap';
+import { ImpactLegend, MapModeToggle, useHeatFor, useImpact, type MapMode } from './ImpactLayer';
 
 type GpsState = 'idle' | 'locating' | 'ok' | 'denied' | 'unavailable';
 // Kept at module level so filter, selection and travel mode survive leaving the screen (for example to Google Maps) and coming back.
-const remembered: { filter: FacilityFilter; mode: TravelMode; selectedId?: string; search: string } = { filter: 'all', mode: 'driving', search: '' };
+const remembered: { filter: FacilityFilter; mode: TravelMode; selectedId?: string; search: string; map: MapMode } = { filter: 'all', mode: 'driving', search: '', map: 'street' };
 const position: { fix: LocationFix | null; state: GpsState } = { fix: null, state: 'idle' };
 
-function useFacilities(role: Role, tick: unknown) {
+export function useFacilities(role: Role, tick: unknown) {
   const [state, setState] = useState<service.Cached<FacilityView[]>>();
   const load = useCallback(async () => setState(await service.operations<FacilityView[]>(role, 'facilities', api => api.facilities())), [role]);
   useEffect(() => { void load(); }, [load, tick]);
@@ -23,7 +24,7 @@ function useFacilities(role: Role, tick: unknown) {
 }
 
 /** Current position shared by the dashboard preview and the Safe Zones screen; refreshed on request. */
-function usePosition() {
+export function usePosition() {
   const [state, setState] = useState(position);
   const locate = useCallback(async () => {
     Object.assign(position, { state: 'locating' }); setState({ ...position });
@@ -35,15 +36,15 @@ function usePosition() {
   return [state, locate] as const;
 }
 
-const pinOf = (f: RankedFacility, language: Language): WebPin => ({
+export const pinOf = (f: RankedFacility, language: Language): WebPin => ({
   id: f.id, point: f, color: categoryMeta[f.category].color, glyph: categoryMeta[f.category].glyph, square: false,
   title: f.name, detail: `${word(language, categoryMeta[f.category].label, categoryMeta[f.category].ml)} · ${f.locality}${f.is_simulated ? ' · SIMULATED' : ''}`,
 });
 
-function useDirections(language: Language, fix: LocationFix | null) {
+export function useDirections(language: Language, fix: LocationFix | null) {
   const [note, setNote] = useState<{ tone: 'info' | 'warning' | 'error'; text: string }>();
   const [busy, setBusy] = useState('');
-  async function go(f: FacilityView, mode: TravelMode) {
+  async function go(f: { id: string; name: string; latitude: number; longitude: number }, mode: TravelMode) {
     setBusy(f.id); setNote(undefined);
     try {
       const result = await openGoogleMapsDirections(f, mode, fix);
@@ -90,6 +91,10 @@ export function SafeZonesScreen({ role, language, tick }: { role: Role; language
   const [sheet, setSheet] = useState(false);
   const [tileError, setTileError] = useState(false);
   const [mapKey, setMapKey] = useState(0);
+  const [mapMode, setMapModeState] = useState<MapMode>(remembered.map);
+  const setMapMode = (m: MapMode) => { remembered.map = m; setMapModeState(m); };
+  const [impact] = useImpact(role, tick, mapMode === 'impact');
+  const heat = useHeatFor(mapMode, impact);
   const map = useRef<WebMapHandle>(null);
   const { go, note, busy } = useDirections(language, gps.fix);
   const setFilter = (v: FacilityFilter) => { remembered.filter = v; setFilterState(v); };
@@ -108,15 +113,17 @@ export function SafeZonesScreen({ role, language, tick }: { role: Role; language
       : gps.state === 'ok' && gps.fix ? <Text style={ui.small}>📍 {word(language, 'Your location', 'നിങ്ങളുടെ സ്ഥലം')}: {describeFix(gps.fix, language)} · {word(language, 'nearest first', 'അടുത്തുള്ളവ ആദ്യം')}</Text>
       : gps.state === 'denied' || gps.state === 'unavailable' ? <Notice tone="warning" title={word(language, gps.state === 'denied' ? 'Location permission is off' : 'Location not available', 'സ്ഥലം ലഭ്യമല്ല')} text={word(language, 'Distances are hidden and the list is in name order. Search for a town below. Directions still work: Google Maps will ask for your starting point.', 'ദൂരം കാണിക്കില്ല. പട്ടണം തിരയുക. Google Maps ആരംഭസ്ഥലം ചോദിക്കും.')}><Button title={word(language, 'Try location again', 'വീണ്ടും ശ്രമിക്കുക')} tone="secondary" icon="locate-outline" onPress={() => void locate()} /></Notice> : null}
     <TextInput value={search} onChangeText={setSearch} placeholder={word(language, 'Search a place, town or service', 'സ്ഥലം അല്ലെങ്കിൽ പട്ടണം തിരയുക')} placeholderTextColor="#6B7A8C" style={ui.input} accessibilityLabel={word(language, 'Search safe zones', 'സുരക്ഷിത കേന്ദ്രങ്ങൾ തിരയുക')} />
+    <MapModeToggle mode={mapMode} onChange={setMapMode} language={language} />
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{filters.map(f => <Chip key={f.id} label={word(language, f.label, f.ml)} active={filter === f.id} onPress={() => setFilter(f.id)} />)}</ScrollView>
     {tileError ? <Notice tone="warning" title={word(language, 'Map could not load', 'മാപ്പ് ലോഡ് ആയില്ല')} text={word(language, 'Map tiles need internet. The list below still works, and directions open in Google Maps.', 'മാപ്പിന് ഇന്റർനെറ്റ് വേണം. താഴെയുള്ള പട്ടിക ഉപയോഗിക്കാം.')}><Button title={word(language, 'Retry map', 'വീണ്ടും ശ്രമിക്കുക')} tone="secondary" icon="refresh-outline" onPress={() => { setTileError(false); setMapKey(k => k + 1); }} /></Notice>
       : <View style={[ui.card, { padding: 0, overflow: 'hidden' }]}>
-        <WebMap key={mapKey} ref={map} height={320} pins={pins} me={me} selectedId={selectedId} onSelect={id => { select(id); setSheet(true); }} onTileError={() => setTileError(true)} />
+        <WebMap key={mapKey} ref={map} height={320} pins={pins} me={me} selectedId={selectedId} heat={heat} onSelect={id => { select(id); setSheet(true); }} onTileError={() => setTileError(true)} />
         <View style={{ flexDirection: 'row', gap: 8, padding: 10 }}>
           <Button style={{ flex: 1 }} title={word(language, 'Locate me', 'എന്റെ സ്ഥലം')} icon="locate-outline" tone="secondary" loading={gps.state === 'locating'} onPress={() => void locate()} />
           <Button style={{ flex: 1 }} title={word(language, 'Recenter', 'മധ്യത്തിലാക്കുക')} icon="scan-outline" tone="quiet" onPress={() => map.current?.recenter()} />
         </View>
       </View>}
+    {mapMode === 'impact' ? <ImpactLegend data={impact} language={language} filters={`Impact Heatmap · ${filters.find(f => f.id === filter)?.label}`} /> : null}
     <View style={ui.between}><Text style={ui.h3}>{ranked.length} {word(language, 'places', 'സ്ഥലങ്ങൾ')}</Text><ModeToggle mode={mode} onChange={setMode} language={language} /></View>
     {data?.stale ? <Notice tone="warning" text={data.at ? `${word(language, 'Offline: showing the list saved', 'ഓഫ്‌ലൈൻ: സേവ് ചെയ്ത പട്ടിക')} ${dateLabel(data.at, language)}.` : word(language, 'No saved safe-zone list on this phone yet. Connect once to download it, or call 1077.', 'സേവ് ചെയ്ത പട്ടിക ഇല്ല. 1077 വിളിക്കുക.')}>{!data.at ? <Button title={word(language, 'Retry', 'വീണ്ടും ശ്രമിക്കുക')} tone="secondary" icon="refresh-outline" onPress={() => void reload()} /> : null}</Notice> : null}
     {note ? <Notice tone={note.tone} text={note.text} /> : null}

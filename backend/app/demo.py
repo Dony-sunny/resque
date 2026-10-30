@@ -50,6 +50,7 @@ INVENTORY = [("food_packets", "Food packets", "packets", "supply", 2000, 300), (
              ("shelter_kits", "Shelter kits", "kits", "supply", 80, 15), ("ambulances", "Ambulances", "vehicles", "asset", 6, 1),
              ("boats", "Rescue boats", "boats", "asset", 8, 1), ("medical_personnel", "Medical personnel", "people", "asset", 20, 3)]
 # (type, affected, trapped, injured, children, elderly, disabled, life_threat, assistance, place, lat, lon, minutes_ago, verification, urgency, team, mission)
+RELAYED_INDEX = 6  # the Vaikom cyclone report arrives through Community QR Relay
 INCIDENTS = [
     ("flood", 6, 2, 1, 2, 1, 0, True, ["rescue", "food", "water"], "Kumarakom, near boat jetty", 9.6170, 76.4310, 35, "verified", "critical", "team-bravo", "en_route"),
     ("flood", 5, 2, 0, 1, 1, 0, False, ["rescue"], "Kumarakom jetty road (possible duplicate)", 9.6178, 76.4318, 28, "unverified", None, None, "unassigned"),
@@ -161,6 +162,9 @@ def reset_demo(engine):
         clock = now()
         for index, spec in enumerate(INCIDENTS):
             report = insert_incident(db, incident_id(index), spec, clock - timedelta(minutes=spec[12]))
+            if index == RELAYED_INDEX:  # carried in by a community volunteer's QR relay, still unverified
+                db.add(Submission(report_id=report.id, user_id="demo-volunteer"))
+                db.add(Audit(report_id=report.id, actor_id="demo-volunteer", action="relay.received", detail="SIMULATED: uploaded by a Community QR Relay volunteer; content unverified"))
             verification, urgency, team_id, mission = spec[13:]
             report.verification, report.urgency = verification, urgency
             if urgency:

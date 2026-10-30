@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
-from . import assistant, demo, ops
+from . import assistant, demo, impact, ops
 from .auth import current_user
 from .models import Assignment, AuditLog, Facility, IncidentDetail, InventoryItem, MissionAssignment, ReliefRequest, Report, RescueTeam, Shelter, now
 from .service import audit, serialize_report, visible
@@ -171,6 +171,20 @@ def facilities(request: Request, category: str | None = None, user=Depends(curre
         if category:
             query = query.where(Facility.category == category)
         return [ops.facility_view(db, f) for f in db.scalars(query) if ops.valid_point(f.latitude, f.longitude)]
+
+
+@router.get("/map/impact")
+def map_impact(request: Request, user=Depends(current_user)):
+    """Impact Heatmap points. Precision depends on role; see app/impact.py."""
+    with Session(engine_of(request)) as db:
+        return impact.impact(db, user)
+
+
+@router.get("/map/relief-demand")
+def map_relief_demand(request: Request, user=Depends(current_user)):
+    need(user, "relief", "coordinator")
+    with Session(engine_of(request)) as db:
+        return impact.relief_demand(db)
 
 
 @router.post("/shelters/{shelter_id}/occupancy")

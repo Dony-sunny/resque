@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Switch, Text, View } from 'react-native';
+import { Image, Switch, Text, View } from 'react-native';
 import type { Config, ConnectionStatus, Role } from '../core/types';
 import { Button, Chip, Field, Icon, Notice, SectionHeading } from '../ui/components';
 import { colors, ui } from '../ui/theme';
@@ -36,7 +36,8 @@ export function SettingsScreen({ role, config, language, onRole, onConfig, synci
     finally { setBusy(false); }
   }
   return <View style={{ gap: 18 }}>
-    <SectionHeading title={word(language, 'Make the relay yours', 'റിലേ ക്രമീകരിക്കുക')} caption={word(language, 'Demo workspaces, language, and connectivity.', 'ഡെമോ വർക്ക്‌സ്‌പേസ്, ഭാഷ, കണക്ഷൻ.')} />
+    <View style={{ alignItems: 'center', gap: 6 }}><Image source={require('../../assets/logo-full.png')} style={{ width: 150, height: 155 }} resizeMode="contain" accessible accessibilityLabel="RESQ" /><Text style={[ui.small, { fontWeight: '700', letterSpacing: 1 }]}>COLLECT FASTER. RESPOND SMARTER.</Text></View>
+    <SectionHeading title={word(language, 'Profile, role and settings', 'പ്രൊഫൈൽ, ക്രമീകരണം')} caption={word(language, 'Demo workspaces, language, and connectivity.', 'ഡെമോ വർക്ക്‌സ്‌പേസ്, ഭാഷ, കണക്ഷൻ.')} />
     <Notice title={word(language, 'Hackathon demo access', 'ഹാക്കത്തോൺ ഡെമോ പ്രവേശനം')} text={word(language, 'Role switching uses separate demo accounts. The backend must explicitly enable demo authentication. A shared access key can protect the judging demo. Production account registration is not included.', 'വ്യത്യസ്ത ഡെമോ അക്കൗണ്ടുകളാണ് ഉപയോഗിക്കുന്നത്. സെർവറിൽ ഡെമോ പ്രവേശനം ഓൺ ആയിരിക്കണം. ജഡ്ജിമാരുടെ ഡെമോ ഒരു ആക്സസ് കീ ഉപയോഗിച്ച് സംരക്ഷിക്കാം. യഥാർത്ഥ അക്കൗണ്ട് രജിസ്ട്രേഷൻ ഉൾപ്പെടുത്തിയിട്ടില്ല.')} />
     <View style={ui.card}>
       <Text style={ui.h3}>{word(language, 'Choose a workspace', 'വർക്ക്‌സ്‌പേസ് തിരഞ്ഞെടുക്കുക')}</Text>
